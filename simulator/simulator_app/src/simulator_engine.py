@@ -450,6 +450,7 @@ class SimulatorEngine:
         row_num,
         cycle_id="",
         vendor="aviat",
+        timeout=60,
     ):
         headers = {
             "Content-Type": "text/csv",
@@ -466,12 +467,141 @@ class SimulatorEngine:
             nifi_url,
             data=payload.encode("utf-8"),
             headers=headers,
-            timeout=60,
+            timeout=timeout,
         )
 
         response.raise_for_status()
 
         return response.status_code, (time.perf_counter() - started) * 1000
+
+    @staticmethod
+    def _action_follow_up_csv(event: dict, *, now: str) -> tuple[str, str]:
+        """Serialize one approved-action clear as a normal vendor CSV row."""
+        vendor = str(event.get("vendor") or "aviat").strip().lower()
+        external_id = str(event.get("external_alarm_id") or event.get("alarm_key") or "").split(":", 1)[-1]
+        site_id = str(event.get("site_id") or "")
+        node_id = str(event.get("node_id") or event.get("object") or "")
+        raised = str(event.get("raised_at") or now)
+        if vendor == "cambium":
+            header = ["Source", "Message", "Source Type", "Name", "Severity", "Alarm Status", "Raised Time", "Clear Time", "Duration (Sec.)"]
+            row = [site_id, str(event.get("event") or "Action follow-up clear"), "Radio", node_id or "RADIO", "Cleared", "Cleared", raised, now, "0"]
+        else:
+            header = ["Event", "Object", "Site", "Raised", "Event ID", "Device Raised", "Severity", "State", "Cleared"]
+            row = [str(event.get("event") or "Action follow-up clear"), node_id or "Radio", site_id, raised, external_id, raised, "Cleared", "Cleared", now]
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(header)
+        writer.writerow(row)
+        return vendor, output.getvalue()
+
+    def send_action_followups(self, events: list[dict], *, cycle_id: str = "", action_id: str = "") -> list[dict]:
+        """Deliver action follow-ups through the configured NiFi CSV ingress.
+
+        This method deliberately has no direct AgenticNOC/database coupling.
+        A failed delivery is returned as evidence on the action receipt; the
+        simulator still reports the action itself as accepted, while the
+        stream remains the authority for restoration verification.
+        """
+        if not isinstance(events, list) or not events:
+            return []
+        host = getattr(settings, "SIMULATOR_NIFI_HOST", "180.75.0.10")
+        port = getattr(settings, "SIMULATOR_NIFI_PORT", 9080)
+        path = str(getattr(settings, "SIMULATOR_NIFI_PATH", "aviat")).strip("/")
+        nifi_url = self._build_url(host, port, path)
+        now = django_timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+        deliveries = []
+        for index, event in enumerate(events[:64], start=1):
+            if not isinstance(event, dict):
+                deliveries.append({"index": index, "status": "rejected", "error": "event must be an object"})
+                continue
+            try:
+                vendor, payload = self._action_follow_up_csv(event, now=now)
+                status_code, latency_ms = self._post_csv_event(
+                    nifi_url,
+                    payload,
+                    f"action-follow-up-{action_id or cycle_id or 'simulator'}.csv",
+                    index,
+                    cycle_id=cycle_id,
+                    vendor=vendor,
+                    timeout=10,
+                )
+                deliveries.append({"index": index, "status": "delivered", "vendor": vendor, "http_status": status_code, "latency_ms": round(latency_ms, 2)})
+            except Exception as exc:  # source evidence remains truthful on ingress failure
+                deliveries.append({"index": index, "status": "failed", "error": str(exc)[:500]})
+        return deliveries
+
+    def send_action_telemetry_followups(
+        self,
+        target_resources: list[dict],
+        *,
+        incident_id: str = "",
+        scenario: str = "",
+        cycle_id: str = "",
+        action_id: str = "",
+    ) -> dict:
+        """Post simulated recovery PM/config through canonical APIs.
+
+        This is deliberately optional: an unset AgenticNOC base URL returns
+        an explicit unavailable result, while configured calls use the same
+        vendor ingestion endpoints as normal data. The action receipt is
+        carried in headers and raw-record metadata for correlation; receipt
+        acceptance is never treated as restoration proof.
+        """
+        base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").strip().rstrip("/")
+        if not base:
+            return {"status": "unavailable", "reason": "SIMULATOR_AGENTICNOC_BASE_URL is not configured", "performance": [], "config": []}
+        token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
+        now = django_timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+        headers = {
+            "Content-Type": "application/json",
+            "X-Action-Receipt-ID": action_id,
+            "X-Incident-ID": str(incident_id),
+            "X-Replay-Cycle-ID": str(cycle_id),
+            "X-Scenario": str(scenario),
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        performance = []
+        config = []
+        for item in (target_resources or [])[:64]:
+            if not isinstance(item, dict) or str(item.get("resource_type") or item.get("type") or "node").lower() != "node":
+                continue
+            node_id = str(item.get("resource_id") or item.get("id") or "").strip()
+            if not node_id:
+                continue
+            common = {
+                "Action Receipt ID": action_id,
+                "Incident ID": str(incident_id),
+                "Replay Cycle ID": str(cycle_id),
+                "Scenario": str(scenario),
+            }
+            performance_record = {
+                **common,
+                "Time Stamp": now,
+                "Device Type": "WTM 4800",
+                "Interface": node_id,
+                "RSL Mean (dBm)": -48.0,
+                "SNR Mean (dB)": 25.0,
+            }
+            config_record = {
+                **common,
+                "IP": "0.0.0.0",
+                "Name": node_id,
+                "Link Name": f"SIMULATED-{node_id}",
+                "Node ID": node_id,
+                "Peer Node ID": "SIMULATED_PEER",
+            }
+            for kind, record, target, collection in (
+                ("performance", performance_record, f"{base}/api/ingestion/performance/aviat/", performance),
+                ("config", config_record, f"{base}/api/ingestion/config/aviat/", config),
+            ):
+                try:
+                    response = requests.post(target, json={"records": [record]}, headers=headers, timeout=10)
+                    body = response.json() if response.content else {}
+                    collection.append({"node_id": node_id, "status": "accepted" if response.ok else "rejected", "http_status": response.status_code, "response": body})
+                except Exception as exc:  # telemetry gaps remain visible to verification
+                    collection.append({"node_id": node_id, "status": "failed", "error": str(exc)[:500]})
+        return {"status": "ok", "performance": performance, "config": config}
 
     def _record_post(self, nifi_url, payload, source_file, row_num, vendor):
         """Post one row and update counters consistently for every profile."""

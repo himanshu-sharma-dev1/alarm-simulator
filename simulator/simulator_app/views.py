@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime, timezone as dt_timezone
 from functools import wraps
 
 import requests
@@ -10,7 +11,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from .models import SimulationRun
+from .models import SimulationRun, SimulatorActionReceipt
 from .src.simulator_engine import engine
 
 
@@ -157,6 +158,111 @@ def _internal_authorized(request):
         return True
     received = request.headers.get("Authorization", "")
     return received == f"Bearer {expected}"
+
+
+SUPPORTED_ACTIONS = {
+    "ACM_MODULATION_HOLD", "CONFIG_ROLLBACK", "VERIFY_STANDBY_AND_REPAIR_PRIMARY",
+    "HOLD_DOWN_AND_CONNECTOR_CHECK", "CAPACITY_OPTIMIZATION_RECOMMENDATION",
+    "ENVIRONMENTAL_FIELD_INSPECTION", "ATPC_POWER_BOOST", "DISPATCH_RECOMMENDATION",
+}
+
+
+def _action_authorized(request):
+    """Actions fail closed even when the read-only probe token is unset."""
+    expected = str(getattr(settings, "SIMULATOR_INTERNAL_TOKEN", "") or "").strip()
+    return bool(expected) and request.headers.get("Authorization", "") == f"Bearer {expected}"
+
+
+@require_POST
+def simulator_action(request):
+    """Accept an already-approved, simulator-only action exactly once."""
+    if not _action_authorized(request):
+        return JsonResponse({"execution_state": "rejected", "rejection_reason": "invalid or unconfigured simulator action token"}, status=403)
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"execution_state": "rejected", "rejection_reason": "invalid JSON body"}, status=400)
+    required = ("approval_id", "incident_id", "scenario", "action_type", "idempotency_key", "target_resources")
+    missing = [key for key in required if payload.get(key) in (None, "", [])]
+    if missing:
+        return JsonResponse({"execution_state": "rejected", "rejection_reason": f"missing required field(s): {', '.join(missing)}"}, status=400)
+    if payload.get("approval_status") and str(payload.get("approval_status")).lower() != "approved":
+        return JsonResponse({"execution_state": "rejected", "rejection_reason": "approval is not approved"}, status=409)
+    if payload.get("approval_expires_at"):
+        try:
+            expiry = datetime.fromisoformat(str(payload["approval_expires_at"]).replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=dt_timezone.utc)
+            if expiry <= datetime.now(dt_timezone.utc):
+                return JsonResponse({"execution_state": "rejected", "rejection_reason": "approval is expired"}, status=409)
+        except ValueError:
+            return JsonResponse({"execution_state": "rejected", "rejection_reason": "approval expiry is invalid"}, status=400)
+    action_type = str(payload.get("action_type") or "").strip().upper()
+    if action_type not in SUPPORTED_ACTIONS:
+        return JsonResponse({"execution_state": "rejected", "rejection_reason": "unsupported simulator action"}, status=422)
+    targets = payload.get("target_resources")
+    if not isinstance(targets, list) or not all(isinstance(item, dict) for item in targets):
+        return JsonResponse({"execution_state": "rejected", "rejection_reason": "target_resources must be a list of objects"}, status=400)
+    idem = str(payload.get("idempotency_key"))[:160]
+    existing = SimulatorActionReceipt.objects.filter(idempotency_key=idem).first()
+    if existing:
+        if (
+            existing.action_type != action_type
+            or existing.scenario != str(payload.get("scenario"))[:64]
+            or existing.target_resources != targets[:64]
+        ):
+            return JsonResponse({"execution_state": "rejected", "rejection_reason": "idempotency key is already bound to a different action"}, status=409)
+        body = {
+            "receipt_id": existing.receipt_id,
+            "execution_state": existing.execution_state,
+            "accepted_targets": existing.target_resources,
+            "generated_evidence_identifiers": existing.generated_evidence_identifiers,
+            "expected_verification_deadline": existing.expected_verification_window,
+            "idempotent_replay": True,
+        }
+        return JsonResponse(body, status=200)
+    receipt_id = f"simulator-action-{uuid.uuid4()}"
+    evidence = [
+        f"simulator:{receipt_id}:action-accepted",
+        f"simulator:{receipt_id}:alarm-follow-up",
+        f"simulator:{receipt_id}:pm-config-follow-up",
+    ]
+    row = SimulatorActionReceipt.objects.create(
+        receipt_id=receipt_id,
+        approval_id=str(payload["approval_id"]),
+        incident_id=str(payload["incident_id"]),
+        scenario=str(payload["scenario"])[:64],
+        action_type=action_type,
+        target_resources=targets[:64],
+        idempotency_key=idem,
+        expected_verification_window=payload.get("expected_verification_window") if isinstance(payload.get("expected_verification_window"), dict) else {"value": payload.get("expected_verification_window")},
+        execution_state="accepted",
+        generated_evidence_identifiers=evidence,
+    )
+    follow_up_delivery = engine.send_action_followups(
+        payload.get("follow_up_events") or [],
+        cycle_id=str(payload.get("replay_cycle_id") or "")[:96],
+        action_id=row.receipt_id,
+    )
+    telemetry_follow_up_delivery = engine.send_action_telemetry_followups(
+        payload.get("target_resources") or [],
+        incident_id=str(payload.get("incident_id") or ""),
+        scenario=str(payload.get("scenario") or ""),
+        cycle_id=str(payload.get("replay_cycle_id") or "")[:96],
+        action_id=row.receipt_id,
+    )
+    # The receipt records acceptance only.  Follow-up delivery is evidence,
+    # not proof of restoration; the normal simulator->NiFi->RabbitMQ path
+    # remains the source of truth for lifecycle verification.
+    return JsonResponse({
+        "receipt_id": row.receipt_id,
+        "accepted_targets": row.target_resources,
+        "execution_state": row.execution_state,
+        "generated_evidence_identifiers": evidence,
+        "expected_verification_deadline": row.expected_verification_window,
+        "follow_up_delivery": follow_up_delivery,
+        "telemetry_follow_up_delivery": telemetry_follow_up_delivery,
+    }, status=202)
 
 
 @require_GET
