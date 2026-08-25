@@ -1,0 +1,50 @@
+services:
+  alarm-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: alarm-simulator:latest
+    container_name: network_alarm_simulator
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/status/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - 9019:8000
+    environment:
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-false}"
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in the deployment environment}"
+      SIMULATOR_FTP_HOST: "${SIMULATOR_FTP_HOST:?set SIMULATOR_FTP_HOST in the deployment environment}"
+      SIMULATOR_FTP_USERNAME: "${SIMULATOR_FTP_USERNAME:?set SIMULATOR_FTP_USERNAME in the deployment environment}"
+      SIMULATOR_FTP_PASSWORD: "${SIMULATOR_FTP_PASSWORD:?set SIMULATOR_FTP_PASSWORD in the deployment environment}"
+      SIMULATOR_FTP_REMOTE_DIR: "${SIMULATOR_FTP_REMOTE_DIR:-/Agentic NOC/Data/Aviat}"
+      SIMULATOR_FTP_ARCHIVE_DIR: "${SIMULATOR_FTP_ARCHIVE_DIR:-/Agentic NOC/Data/Aviat/sent}"
+      SIMULATOR_FTP_REMOTE_DIR_AVIAT: "${SIMULATOR_FTP_REMOTE_DIR_AVIAT:-/Agentic NOC/Data/Aviat}"
+      SIMULATOR_FTP_ARCHIVE_DIR_AVIAT: "${SIMULATOR_FTP_ARCHIVE_DIR_AVIAT:-/Agentic NOC/Data/Aviat/sent}"
+      SIMULATOR_FTP_REMOTE_DIR_CAMBIUM: "${SIMULATOR_FTP_REMOTE_DIR_CAMBIUM:-/Agentic NOC/Data/CAMBIUM}"
+      SIMULATOR_FTP_ARCHIVE_DIR_CAMBIUM: "${SIMULATOR_FTP_ARCHIVE_DIR_CAMBIUM:-/Agentic NOC/Data/CAMBIUM/sent}"
+      SIMULATOR_ACCEPTANCE_SITE_ID: "${SIMULATOR_ACCEPTANCE_SITE_ID:-UEMWBSNA01}"
+      SIMULATOR_NIFI_HOST: "${SIMULATOR_NIFI_HOST:-180.75.0.10}"
+      SIMULATOR_NIFI_PORT: "${SIMULATOR_NIFI_PORT:-9080}"
+      SIMULATOR_NIFI_PATH: "${SIMULATOR_NIFI_PATH:-aviat}"
+      SIMULATOR_AGENTICNOC_RUNTIME_URL: "${SIMULATOR_AGENTICNOC_RUNTIME_URL:-http://180.75.0.7:8000/api/stream/runtime/}"
+      SIMULATOR_REDIS_HOST: "${SIMULATOR_REDIS_HOST:-180.75.0.15}"
+      SIMULATOR_REDIS_PORT: "${SIMULATOR_REDIS_PORT:-6379}"
+      SIMULATOR_INTERNAL_TOKEN: "${SIMULATOR_INTERNAL_TOKEN:-}"
+    volumes:
+      - /root/simulator/simulator:/app
+      - simulator-data:/app/data
+    networks:
+      simulator_network:
+        ipv4_address: 180.75.0.64
+
+networks:
+  simulator_network:
+    external: true
+    name: cplatform_iktara_cPlatform
+
+volumes:
+  simulator-data:

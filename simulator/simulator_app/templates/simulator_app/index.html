@@ -1,0 +1,319 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PulseFeed &mdash; Alarm Stream Simulator</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{% static 'simulator_app/style.css' %}">
+</head>
+
+<body>
+
+<!-- Hidden CSRF token so script.js can send it as X-CSRFToken on POSTs -->
+<form style="display: none;">{% csrf_token %}</form>
+
+<div class="app">
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-brand">
+            <div class="brand-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12h4l2.5-7 4 14 2.5-7H22"/>
+                </svg>
+            </div>
+            <div>
+                <h1>PulseFeed</h1>
+        <p>Server-managed cPlatform → NiFi → RabbitMQ alarm pipeline</p>
+            </div>
+        </div>
+
+        <div class="header-status">
+            <span class="status-dot stopped"></span>
+            <span id="headerStatus">STOPPED</span>
+        </div>
+    </header>
+
+
+    <main class="main-content">
+
+        <!-- ============================================================
+             CONFIG SCREEN — the only thing visible on load. Just the
+             form and a Start button, nothing to scroll past.
+             ============================================================ -->
+        <section id="configScreen" class="screen active">
+            <div class="config-wrap">
+
+                <section class="card">
+
+                    <div class="card-header">
+                        <div>
+                            <h2>Simulator Configuration</h2>
+                    <p>Choose a source profile; the active cPlatform NiFi target is protected from accidental edits.</p>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+
+                        <div class="form-group">
+                            <label for="profile">Source Profile</label>
+                            <select id="profile">
+                                <option value="ftp">Real FTP source</option>
+                                <option value="end_to_end_acceptance">Deterministic end-to-end acceptance (2 events)</option>
+                            </select>
+                            <span class="help-text">Acceptance mode still uses the live NiFi/RabbitMQ/database path.</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="vendor">Vendor</label>
+                            <select id="vendor">
+                                <option value="aviat">Aviat</option>
+                                <option value="cambium">Cambium</option>
+                            </select>
+                            <span class="help-text">Determines the alarm format</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="rate">Send Rate</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="rate" value="1" min="0.1" max="100" step="0.1">
+                                <span>alarms/sec</span>
+                            </div>
+                            <span class="help-text" id="rateHelp">Loading server limit…</span>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="runMode">Run Mode</label>
+                            <select id="runMode">
+                                <option value="continuous">Continuous until stopped</option>
+                                <option value="bounded">Bounded acceptance run</option>
+                            </select>
+                            <span class="help-text">Bounded runs stop after the event limit.</span>
+                        </div>
+
+                        <div class="form-group" id="eventLimitGroup" style="display:none">
+                            <label for="eventLimit">Event Limit</label>
+                            <input type="number" id="eventLimit" value="100" min="1" step="1">
+                            <span class="help-text">Useful for repeatable end-to-end verification.</span>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label>Managed Target</label>
+                            <div class="managed-target" id="managedTarget">Loading cPlatform target…</div>
+                        </div>
+
+                    </div>
+
+                    <div class="actions">
+                        <button
+                            type="button"
+                            id="startButton"
+                            class="btn btn-start"
+                            onclick="startSimulator()"
+                        >
+                            <span>&#9654;</span>
+                            Start Simulator
+                        </button>
+                    </div>
+
+                    <p id="configError" class="config-error"></p>
+                    {% if not can_control %}<p class="auth-note">You can inspect live status. <a href="/login/">Sign in as a simulator operator</a> to start or stop runs.</p>{% endif %}
+
+                </section>
+
+            </div>
+        </section>
+
+
+        <!-- ============================================================
+             RUNNING SCREEN — swapped in on Start, same tab, no reload.
+             Flow visualization up top, stats/activity + log below.
+             ============================================================ -->
+        <section id="runningScreen" class="screen">
+
+            <section class="card flow-card">
+
+                <div class="card-header">
+                    <div>
+                        <h2>Data Flow</h2>
+                        <p id="flowSubtitle">Alarm data streaming through the active cPlatform path</p>
+                    </div>
+
+                    <div class="run-actions">
+                        <button
+                            type="button"
+                            id="stopButton"
+                            class="btn btn-stop"
+                            onclick="stopSimulator()"
+                        >
+                            <span>&#9632;</span>
+                            Stop Simulator
+                        </button>
+
+                        <button
+                            type="button"
+                            id="backButton"
+                            class="btn btn-back"
+                            onclick="backToConfig()"
+                            style="display: none;"
+                        >
+                            &#8592; New Run
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flow-diagram" id="flowDiagram">
+
+                    <div class="flow-node">
+                        <div class="node-icon-circle" id="sourceNodeIcon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="9"/>
+                                <circle cx="12" cy="12" r="5.2"/>
+                                <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>
+                                <path d="M12 12 L12 3"/>
+                            </svg>
+                        </div>
+                        <div class="node-label">Simulator</div>
+                        <div class="node-sub" id="flowSourceLabel">&mdash;</div>
+                    </div>
+
+                    <div class="flow-pipe">
+                        <div class="pipe-line"></div>
+                        <span class="flow-packet"></span>
+                        <span class="flow-packet"></span>
+                        <span class="flow-packet"></span>
+                        <div class="pipe-label" id="flowPipeLabel">Waiting to start&hellip;</div>
+                    </div>
+
+                    <div class="flow-node">
+                        <div class="node-icon-circle node-target" id="targetNodeIcon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/>
+                                <path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6"/>
+                                <path d="M15.8 8.2a5.4 5.4 0 0 1 0 7.6"/>
+                                <path d="M5.3 5.3a9.6 9.6 0 0 0 0 13.4"/>
+                                <path d="M18.7 5.3a9.6 9.6 0 0 1 0 13.4"/>
+                            </svg>
+                        </div>
+                        <div class="node-label">NiFi ListenHTTP</div>
+                        <div class="node-sub" id="flowEndpoint">&mdash;</div>
+                    </div>
+
+                </div>
+            </section>
+
+            <div class="running-grid">
+
+                <div class="running-main">
+
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Status</h2>
+                                <p>Current simulator state</p>
+                            </div>
+                            <div class="large-status">
+                                <span id="statusDot" class="status-dot stopped"></span>
+                                <span id="statusText">STOPPED</span>
+                            </div>
+                        </div>
+
+                    <div class="stats-grid">
+                            <div class="stat-card">
+                                <span class="stat-label">Alarms Sent</span>
+                                <strong id="alarmsSent">0</strong>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-label">Successful</span>
+                                <strong id="successful">0</strong>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-label">Failed</span>
+                                <strong id="failed">0</strong>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-label">Send rate</span>
+                                <strong id="sendRate">—</strong>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-label">p95 latency</span>
+                                <strong id="p95Latency">—</strong>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-label">Run ID</span>
+                                <strong id="runId" class="mono-small">—</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-header"><div><h2>Downstream Runtime</h2><p>Live AgenticNOC view of NiFi, RabbitMQ, ClickHouse, and incidents</p></div><span id="downstreamStatus" class="status-badge">—</span></div>
+                        <div id="downstreamGrid" class="downstream-grid"><div class="downstream-item">Waiting for runtime telemetry…</div></div>
+                    </section>
+
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Alarm History</h2>
+                                <p>Successful vs failed &middot; last 30 minutes</p>
+                            </div>
+                            <div class="chart-legend">
+                                <span class="legend-item"><span class="legend-dot legend-success"></span>Successful</span>
+                                <span class="legend-item"><span class="legend-dot legend-failed"></span>Failed</span>
+                            </div>
+                        </div>
+
+                        <div class="chart-wrap">
+                            <svg id="historyChart" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+                            <div class="chart-axis-labels">
+                                <span id="chartLabelStart">&mdash;</span>
+                                <span id="chartLabelEnd">&mdash;</span>
+                            </div>
+                        </div>
+                    </section>
+
+                </div>
+
+                <aside class="running-side">
+                    <section class="card log-card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Event Log</h2>
+                                <p>Simulator events and HTTP responses</p>
+                            </div>
+                            <button type="button" class="clear-button" onclick="clearLog()">Clear</button>
+                        </div>
+
+                        <div id="eventLog" class="event-log">
+                            <div class="log-entry">
+                                <span class="log-time">--:--:--</span>
+                                <span class="log-message">Simulator is ready.</span>
+                            </div>
+                        </div>
+                    </section>
+                </aside>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <footer class="footer">
+        PulseFeed &mdash; Alarm Stream Simulator
+    </footer>
+
+</div>
+
+<script src="{% static 'simulator_app/script.js' %}"></script>
+
+</body>
+</html>
