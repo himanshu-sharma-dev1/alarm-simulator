@@ -18,7 +18,9 @@ history chart.
 
 import csv
 from ftplib import FTP, error_perm
+import hashlib
 import io
+import json
 import statistics
 import threading
 import time
@@ -583,14 +585,53 @@ class SimulatorEngine:
                 "RSL Mean (dBm)": -48.0,
                 "SNR Mean (dB)": 25.0,
             }
+            # Recovery evidence is scenario-specific.  These are simulated
+            # observations delivered through the normal canonical ingestion
+            # API; the action receipt itself never implies that any of these
+            # values recovered.
+            if scenario == "site_power_failure":
+                performance_record["Input Voltage (V)"] = 48.0
+            elif scenario == "environmental_alarm":
+                performance_record["Temperature (C)"] = 40.0
+            elif scenario == "capacity_congestion":
+                performance_record.update({
+                    "Downlink Throughput (Mbps)": 80.0,
+                    "Uplink Throughput (Mbps)": 80.0,
+                    "Utilization (%)": 70.0,
+                    "Modulation": "QAM-64",
+                })
             config_record = {
                 **common,
                 "IP": "0.0.0.0",
-                "Name": node_id,
+                "Name": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
                 "Link Name": f"SIMULATED-{node_id}",
-                "Node ID": node_id,
+                "Node ID": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
                 "Peer Node ID": "SIMULATED_PEER",
             }
+            config_record["Link"] = {
+                "IP": "0.0.0.0",
+                "Name": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
+                "Link Name": f"SIMULATED-{node_id}",
+                "Site A": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
+                "Site Z": "SIMULATED_PEER",
+                "Maximum Configured Capacity": 200.0,
+            }
+            config_record["Config"] = {"mmwCarrier1/1": {
+                "Tx Frequency (kHz)": 81250000,
+                "Rx Frequency (kHz)": 81250000,
+                "Channel Separation (kHz)": 250000,
+                "Detected Tx Power (dBm)": 11.4,
+                "ATPC Tx Power": 11.4,
+            }}
+            if scenario == "config_drift":
+                # The generated fixture's latest snapshot is the known-good
+                # baseline after rollback.  Keep this explicit in the
+                # canonical record so ConfigDriftAgent can verify it.
+                config_record.update({
+                    "Frequency (MHz)": 81250.0,
+                    "Channel Bandwidth (MHz)": 250.0,
+                    "Tx Power (dBm)": 11.4,
+                })
             for kind, record, target, collection in (
                 ("performance", performance_record, f"{base}/api/ingestion/performance/aviat/", performance),
                 ("config", config_record, f"{base}/api/ingestion/config/aviat/", config),
@@ -602,6 +643,217 @@ class SimulatorEngine:
                 except Exception as exc:  # telemetry gaps remain visible to verification
                     collection.append({"node_id": node_id, "status": "failed", "error": str(exc)[:500]})
         return {"status": "ok", "performance": performance, "config": config}
+
+    # ------------------------------------------------------------------ #
+    # UI-triggered scenario recipes
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _scenario_alarm_csv(alarm: dict, *, vendor: str) -> str:
+        """Render one recipe alarm as the same vendor CSV the FTP path uses."""
+
+        node_id = str(alarm.get("node_id") or alarm.get("object") or "RADIO")
+        site_id = str(alarm.get("site_id") or node_id)
+        raised = str(alarm.get("raised_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        category = str(alarm.get("canonical_category") or "UNKNOWN")
+        event = str(alarm.get("event") or alarm.get("probable_cause_raw") or category)
+        # Recipe categories are an operator/test input, not a replacement for
+        # the vendor stream contract.  Prefix the simulated text with a
+        # vendor-shaped phrase understood by the existing NiFi normalizer so
+        # the live correlation path materializes the intended scenario.
+        category_hints = {
+            "RF_DEGRADED": "Remote Fade Margin Low",
+            "NODE_ISOLATION": "Device is Offline",
+            "LINK_DOWN": "Ethernet port link down",
+            "HW_FAULT": "Module is missing",
+            "POWER_FAULT": "Power supply voltage low",
+            "PROTECTION_SWITCH": "1+1 switch",
+            "CAPACITY_CONGESTION": "Capacity exceeded",
+            "SYNC_LOSS": "Loss of sync",
+            "CONFIG_MISMATCH": "Configuration mismatch",
+            "ENVIRONMENTAL": "Temperature high",
+        }
+        hint = category_hints.get(category.upper())
+        if hint and hint.lower() not in event.lower():
+            event = f"{hint}: {event}"
+        severity = str(alarm.get("severity") or "major").title()
+        state = str(alarm.get("state") or ("Cleared" if not alarm.get("is_active", True) else "Active"))
+        event_id = str(alarm.get("event_id") or alarm.get("external_alarm_id") or f"scenario-{node_id}-{category}")
+        output = io.StringIO()
+        writer = csv.writer(output)
+        if vendor == "cambium":
+            writer.writerow(["Source", "Message", "Source Type", "Name", "Severity", "Alarm Status", "Raised Time", "Clear Time", "Duration (Sec.)", "IP Address", "MAC"])
+            writer.writerow([site_id, event, "Radio", event_id, severity, state, raised, str(alarm.get("cleared_at") or ""), "0", str(alarm.get("ip_address") or ""), str(alarm.get("mac_address") or "")])
+        else:
+            writer.writerow(["Event", "Object", "Site", "Raised", "Event ID", "Device Raised", "Severity", "State", "Cleared"])
+            writer.writerow([event, f"Radio [{node_id}]", site_id, raised, event_id, raised, severity, state, str(alarm.get("cleared_at") or "")])
+        return output.getvalue()
+
+    @staticmethod
+    def _scenario_pm_record(sample: dict, *, vendor: str, node_id: str) -> dict:
+        """Translate canonical fixture PM into a minimal vendor record."""
+
+        timestamp = str(sample.get("timestamp") or sample.get("Time Stamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        modulation = str(sample.get("modulation") or sample.get("modulation_state") or "qpsk").lower().replace("_", "-")
+        if modulation.startswith("qam") and "-" not in modulation:
+            modulation = modulation.replace("qam", "qam-")
+        if vendor == "cambium":
+            return {
+                "MAC": str(sample.get("mac_address") or sample.get("MAC") or f"00:00:00:{hashlib.sha1(node_id.encode()).hexdigest()[:6]}"),
+                "Polling Timestamp": timestamp,
+                "Device Name": node_id,
+                "Downlink RSSI (dBm)": sample.get("rsl_dbm", sample.get("rsl_dl_dbm")),
+                "Uplink RSSI (dBm)": sample.get("rsl_dbm", sample.get("rsl_ul_dbm")),
+                "SNR (dB)": sample.get("snr_db"),
+                "Input Voltage (V)": sample.get("input_voltage_v"),
+                "Modulation": sample.get("modulation") or sample.get("modulation_state"),
+                "Downlink Throughput (Mbps)": sample.get("throughput_mbps_dl"),
+                "Uplink Throughput (Mbps)": sample.get("throughput_mbps_ul"),
+                "Utilization (%)": sample.get("capacity_utilization_pct_dl"),
+            }
+        return {
+            "Time Stamp": timestamp,
+            "Device Type": "WTM 4800",
+            "Interface": node_id,
+            "Circle": node_id[:2],
+            "Radio": {"mmwCarrier1/1": {
+                "RSL Mean (dBm)": sample.get("rsl_dbm", sample.get("rsl_dl_dbm")),
+                "SNR Mean (dB)": sample.get("snr_db"),
+            }},
+            "Ethernet": {"Radio1": {
+                "In Mbps (Mbps)": sample.get("throughput_mbps_dl"),
+                "Out Mbps (Mbps)": sample.get("throughput_mbps_ul"),
+                "In Utilization (%)": sample.get("capacity_utilization_pct_dl"),
+                "Out Utilization (%)": sample.get("capacity_utilization_pct_ul"),
+            }},
+            "Sensor": {
+                "Radio1": {"Input Voltage (V)": sample.get("input_voltage_v")},
+                "Terminal": {
+                    "Input Voltage (V)": sample.get("input_voltage_v"),
+                    "Temperature (C)": sample.get("temperature_c"),
+                },
+            },
+            "Modulation_RX": modulation,
+            "Modulation_TX": modulation,
+        }
+
+    @staticmethod
+    def _scenario_config_record(snapshot: dict, *, vendor: str, node_id: str) -> dict:
+        if vendor == "cambium":
+            return {
+                "MAC Address": f"00:00:00:{hashlib.sha1(node_id.encode()).hexdigest()[:6]}",
+                "Device Name": node_id,
+                "Site": str(snapshot.get("site_id") or node_id),
+                "Status": "Online",
+                "Configured Capacity (Mbps)": snapshot.get("configured_capacity_mbps", 200),
+            }
+        native_node_id = node_id[4:] if node_id.upper().startswith("AVT_") else node_id
+        peer_node_id = str(snapshot.get("peer_node_id") or "SIMULATED_PEER")
+        if peer_node_id.upper().startswith("AVT_"):
+            peer_node_id = peer_node_id[4:]
+        return {
+            "Link": {
+                "IP": "0.0.0.0",
+                # Aviat exports carry native terminal names; the adapter
+                # adds the AVT_ namespace while canonicalizing them.
+                "Name": native_node_id,
+                "Link Name": f"SIMULATED-{node_id}",
+                "Site A": native_node_id,
+                "Site Z": peer_node_id,
+                "Maximum Configured Capacity": snapshot.get("configured_capacity_mbps", 200),
+            },
+            "Config": {"mmwCarrier1/1": {
+                "Tx Frequency (kHz)": snapshot.get("frequency_mhz", 81250.0) * 1000 if snapshot.get("frequency_mhz") is not None else None,
+                "Rx Frequency (kHz)": snapshot.get("rx_frequency_mhz", snapshot.get("frequency_mhz", 81250.0)) * 1000 if snapshot.get("rx_frequency_mhz", snapshot.get("frequency_mhz")) is not None else None,
+                "Channel Separation (kHz)": snapshot.get("channel_bandwidth_mhz", 250.0) * 1000 if snapshot.get("channel_bandwidth_mhz") is not None else None,
+                "Detected Tx Power (dBm)": snapshot.get("tx_power_dbm", 11.4),
+                "ATPC Tx Power": snapshot.get("atpc_tx_power_dbm", 11.4),
+            }},
+            "Latitude": snapshot.get("latitude"),
+            "Longitude": snapshot.get("longitude"),
+        }
+
+    def send_scenario_recipe(self, recipe: dict) -> dict:
+        """Deliver a bounded scenario through NiFi and canonical APIs.
+
+        This method is deliberately synchronous and small: the recipe has at
+        most a handful of alarms/PM points, so the HTTP response can return
+        complete provenance while RabbitMQ/correlation continues
+        asynchronously.  It never creates an Incident or bypasses NiFi.
+        """
+
+        if not isinstance(recipe, dict):
+            raise ValueError("scenario recipe must be an object")
+        vendor = str(recipe.get("vendor") or "aviat").strip().lower()
+        if vendor not in {"aviat", "cambium"}:
+            raise ValueError("scenario recipe vendor must be aviat or cambium")
+        cycle_id = str(recipe.get("cycle_id") or "")[:96]
+        if not cycle_id:
+            raise ValueError("scenario recipe cycle_id is required")
+        alarms = [item for item in (recipe.get("alarms") or []) if isinstance(item, dict)][:64]
+        if not alarms:
+            raise ValueError("scenario recipe must contain at least one alarm")
+
+        host = getattr(settings, "SIMULATOR_NIFI_HOST", "180.75.0.10")
+        port = getattr(settings, "SIMULATOR_NIFI_PORT", 9080)
+        path = str(getattr(settings, "SIMULATOR_NIFI_PATH", "aviat")).strip("/")
+        nifi_url = self._build_url(host, port, path)
+        alarm_delivery = []
+        for index, alarm in enumerate(alarms, start=1):
+            try:
+                status_code, latency_ms = self._post_csv_event(
+                    nifi_url,
+                    self._scenario_alarm_csv(alarm, vendor=vendor),
+                    f"agentic-demo-{recipe.get('scenario') or 'scenario'}-{cycle_id}.csv",
+                    index,
+                    cycle_id=cycle_id,
+                    vendor=vendor,
+                    timeout=10,
+                )
+                alarm_delivery.append({"index": index, "event_id": alarm.get("event_id"), "status": "delivered", "http_status": status_code, "latency_ms": round(latency_ms, 2)})
+            except Exception as exc:
+                alarm_delivery.append({"index": index, "event_id": alarm.get("event_id"), "status": "failed", "error": str(exc)[:400]})
+
+        base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").strip().rstrip("/")
+        token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
+        telemetry = {"status": "unavailable", "reason": "SIMULATOR_AGENTICNOC_BASE_URL is not configured", "performance": [], "config": []}
+        if base:
+            headers = {"Content-Type": "application/json", "X-Replay-Cycle-ID": cycle_id, "X-Scenario": str(recipe.get("scenario") or "")[:64]}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            performance, config = [], []
+            pm_series = recipe.get("pm_series") if isinstance(recipe.get("pm_series"), dict) else {}
+            snapshots = recipe.get("config_snapshots") if isinstance(recipe.get("config_snapshots"), dict) else {}
+            nodes = recipe.get("topology_snapshot") if isinstance(recipe.get("topology_snapshot"), dict) else {}
+            node_meta = {str(item.get("node_id")): item for item in (nodes.get("nodes") or []) if isinstance(item, dict)}
+            for node_id, samples in list(pm_series.items())[:32]:
+                for sample in [item for item in (samples or []) if isinstance(item, dict)][:32]:
+                    record = self._scenario_pm_record(sample, vendor=vendor, node_id=str(node_id))
+                    try:
+                        response = requests.post(f"{base}/api/ingestion/performance/{vendor}/", json={"records": [record]}, headers=headers, timeout=10)
+                        performance.append({"node_id": str(node_id), "timestamp": sample.get("timestamp"), "status": "accepted" if response.ok else "rejected", "http_status": response.status_code})
+                    except Exception as exc:
+                        performance.append({"node_id": str(node_id), "status": "failed", "error": str(exc)[:400]})
+            for node_id, snapshots_for_node in list(snapshots.items())[:32]:
+                if not snapshots_for_node:
+                    continue
+                record = self._scenario_config_record({**node_meta.get(str(node_id), {}), **(snapshots_for_node[-1] if isinstance(snapshots_for_node[-1], dict) else {})}, vendor=vendor, node_id=str(node_id))
+                try:
+                    response = requests.post(f"{base}/api/ingestion/config/{vendor}/", json={"records": [record]}, headers=headers, timeout=10)
+                    config.append({"node_id": str(node_id), "status": "accepted" if response.ok else "rejected", "http_status": response.status_code})
+                except Exception as exc:
+                    config.append({"node_id": str(node_id), "status": "failed", "error": str(exc)[:400]})
+            telemetry = {"status": "ok", "performance": performance, "config": config}
+
+        return {
+            "status": "accepted" if any(item.get("status") == "delivered" for item in alarm_delivery) else "failed",
+            "scenario": str(recipe.get("scenario") or "")[:40],
+            "vendor": vendor,
+            "cycle_id": cycle_id,
+            "recipe_hash": hashlib.sha256(json.dumps(recipe, sort_keys=True, default=str).encode()).hexdigest()[:24],
+            "alarm_delivery": alarm_delivery,
+            "telemetry_delivery": telemetry,
+        }
 
     def _record_post(self, nifi_url, payload, source_file, row_num, vendor):
         """Post one row and update counters consistently for every profile."""

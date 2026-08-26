@@ -41,6 +41,10 @@ class SimulatorActionReceipt(models.Model):
     """Immutable idempotency ledger for simulator-only actions."""
 
     receipt_id = models.CharField(max_length=128, unique=True)
+    # AgenticNOC creates its own immutable receipt before crossing the
+    # simulator boundary.  Persist that identifier on the simulator ledger so
+    # the two audit records can be joined without trusting a UI-supplied id.
+    agentic_receipt_id = models.CharField(max_length=128, blank=True, default="")
     approval_id = models.CharField(max_length=128)
     incident_id = models.CharField(max_length=128)
     scenario = models.CharField(max_length=64)

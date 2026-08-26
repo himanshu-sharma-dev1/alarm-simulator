@@ -214,6 +214,7 @@ def simulator_action(request):
             return JsonResponse({"execution_state": "rejected", "rejection_reason": "idempotency key is already bound to a different action"}, status=409)
         body = {
             "receipt_id": existing.receipt_id,
+            "agentic_receipt_id": existing.agentic_receipt_id,
             "execution_state": existing.execution_state,
             "accepted_targets": existing.target_resources,
             "generated_evidence_identifiers": existing.generated_evidence_identifiers,
@@ -229,6 +230,7 @@ def simulator_action(request):
     ]
     row = SimulatorActionReceipt.objects.create(
         receipt_id=receipt_id,
+        agentic_receipt_id=str(payload.get("agentic_receipt_id") or "")[:128],
         approval_id=str(payload["approval_id"]),
         incident_id=str(payload["incident_id"]),
         scenario=str(payload["scenario"])[:64],
@@ -256,6 +258,7 @@ def simulator_action(request):
     # remains the source of truth for lifecycle verification.
     return JsonResponse({
         "receipt_id": row.receipt_id,
+        "agentic_receipt_id": row.agentic_receipt_id,
         "accepted_targets": row.target_resources,
         "execution_state": row.execution_state,
         "generated_evidence_identifiers": evidence,
@@ -263,6 +266,94 @@ def simulator_action(request):
         "follow_up_delivery": follow_up_delivery,
         "telemetry_follow_up_delivery": telemetry_follow_up_delivery,
     }, status=202)
+
+
+@require_POST
+def simulator_scenario_run(request):
+    """Accept a bounded UI demo recipe and deliver it through real ingress.
+
+    The endpoint is service-to-service only.  It never creates an Incident;
+    NiFi, RabbitMQ and AgenticNOC's correlator remain authoritative for that
+    projection.  A durable SimulationRun row records the simulator-side
+    provenance and idempotent cycle.
+    """
+
+    if not _action_authorized(request):
+        return JsonResponse({"status": "rejected", "rejection_reason": "invalid or unconfigured simulator scenario token"}, status=403)
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "rejected", "rejection_reason": "invalid JSON body"}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"status": "rejected", "rejection_reason": "scenario recipe must be an object"}, status=400)
+    cycle_id = str(payload.get("cycle_id") or "").strip()[:96]
+    scenario = str(payload.get("scenario") or "").strip()[:40]
+    vendor = str(payload.get("vendor") or "aviat").strip().lower()
+    if not cycle_id or not scenario:
+        return JsonResponse({"status": "rejected", "rejection_reason": "scenario and cycle_id are required"}, status=400)
+    if vendor not in {"aviat", "cambium"}:
+        return JsonResponse({"status": "rejected", "rejection_reason": "vendor must be aviat or cambium"}, status=400)
+    existing = SimulationRun.objects.filter(cycle_id=cycle_id, profile="scenario").first()
+    if existing:
+        if existing.status in {"starting", "running"}:
+            return JsonResponse({
+                "status": "in_progress",
+                "scenario_run_id": existing.run_id,
+                "cycle_id": cycle_id,
+                "idempotent_replay": True,
+                "simulator_status": existing.status,
+            }, status=409)
+        if existing.status == "completed" or existing.successful:
+            return JsonResponse({
+                "status": "accepted",
+                "scenario_run_id": existing.run_id,
+                "cycle_id": cycle_id,
+                "idempotent_replay": True,
+                "simulator_status": existing.status,
+            }, status=200)
+        # A failed recipe with zero accepted alarms can be retried with the
+        # same cycle.  If even one alarm was accepted, the row above is the
+        # authoritative receipt and a replay must remain idempotent.
+        existing.status = "starting"
+        existing.last_error = ""
+        existing.failed = 0
+        existing.alarms_sent = 0
+        existing.stopped_at = None
+        existing.started_at = timezone.now()
+        existing.save(update_fields=["status", "last_error", "failed", "alarms_sent", "stopped_at", "started_at"])
+        row = existing
+    else:
+        run_id = str(payload.get("run_id") or f"demo-{uuid.uuid4()}")[:64]
+        row = SimulationRun.objects.create(
+            run_id=run_id,
+            vendor=vendor,
+            rate_eps=0.0,
+            run_mode="bounded",
+            event_limit=len(payload.get("alarms") or []),
+            target=_target_url(),
+            status="starting",
+            cycle_id=cycle_id,
+            profile="scenario",
+            started_at=timezone.now(),
+        )
+    run_id = row.run_id
+    try:
+        result = engine.send_scenario_recipe(payload)
+    except Exception as exc:
+        row.status = "error"
+        row.last_error = str(exc)[:1000]
+        row.stopped_at = timezone.now()
+        row.save(update_fields=["status", "last_error", "stopped_at"])
+        return JsonResponse({"status": "failed", "scenario_run_id": run_id, "cycle_id": cycle_id, "rejection_reason": str(exc)[:400]}, status=502)
+    delivered = sum(1 for item in result.get("alarm_delivery") or [] if item.get("status") == "delivered")
+    row.status = "completed" if delivered else "error"
+    row.alarms_sent = len(result.get("alarm_delivery") or [])
+    row.successful = delivered
+    row.failed = max(0, row.alarms_sent - delivered)
+    row.stopped_at = timezone.now()
+    row.last_error = "" if delivered else "no alarm was delivered to NiFi"
+    row.save(update_fields=["status", "alarms_sent", "successful", "failed", "stopped_at", "last_error"])
+    return JsonResponse({"scenario_run_id": run_id, "cycle_id": cycle_id, **result}, status=202 if delivered else 502)
 
 
 @require_GET

@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/status/", views.simulator_status, name="simulator_status"),
     path("api/internal/status/", views.simulator_internal_status, name="simulator_internal_status"),
     path("api/internal/actions/", views.simulator_action, name="simulator_action"),
+    path("api/internal/scenario-runs/", views.simulator_scenario_run, name="simulator_scenario_run"),
     path("api/config/", views.simulator_config, name="simulator_config"),
     path("api/history/", views.simulator_history, name="simulator_history"),
     path("api/runs/", views.simulator_runs, name="simulator_runs"),
