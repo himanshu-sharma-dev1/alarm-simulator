@@ -35,7 +35,10 @@ services:
       SIMULATOR_AGENTICNOC_INTERNAL_TOKEN: "${SIMULATOR_AGENTICNOC_INTERNAL_TOKEN:-}"
       SIMULATOR_REDIS_HOST: "${SIMULATOR_REDIS_HOST:-180.75.0.15}"
       SIMULATOR_REDIS_PORT: "${SIMULATOR_REDIS_PORT:-6379}"
-      SIMULATOR_INTERNAL_TOKEN: "${SIMULATOR_INTERNAL_TOKEN:-}"
+      # The internal replay endpoint is service-to-service and must fail
+      # closed.  Keep the demo token configurable through .env, with a
+      # non-empty local default that matches AgenticNOC's development value.
+      SIMULATOR_INTERNAL_TOKEN: "${SIMULATOR_INTERNAL_TOKEN:-agenticnoc-demo-internal-token}"
     volumes:
       - /root/simulator/simulator:/app
       - simulator-data:/app/data

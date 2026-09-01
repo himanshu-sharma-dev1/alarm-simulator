@@ -9,6 +9,7 @@ from django.contrib.auth.views import LoginView
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .models import SimulationRun, SimulatorActionReceipt
@@ -155,7 +156,9 @@ def simulator_status(request):
 def _internal_authorized(request):
     expected = str(getattr(settings, "SIMULATOR_INTERNAL_TOKEN", "") or "").strip()
     if not expected:
-        return True
+        # Internal replay delivery is an authenticated service boundary.  A
+        # missing token is configuration failure, never anonymous access.
+        return False
     received = request.headers.get("Authorization", "")
     return received == f"Bearer {expected}"
 
@@ -168,11 +171,12 @@ SUPPORTED_ACTIONS = {
 
 
 def _action_authorized(request):
-    """Actions fail closed even when the read-only probe token is unset."""
+    """Actions require the explicitly configured service token."""
     expected = str(getattr(settings, "SIMULATOR_INTERNAL_TOKEN", "") or "").strip()
     return bool(expected) and request.headers.get("Authorization", "") == f"Bearer {expected}"
 
 
+@csrf_exempt
 @require_POST
 def simulator_action(request):
     """Accept an already-approved, simulator-only action exactly once."""
@@ -268,6 +272,7 @@ def simulator_action(request):
     }, status=202)
 
 
+@csrf_exempt
 @require_POST
 def simulator_scenario_run(request):
     """Accept a bounded UI demo recipe and deliver it through real ingress.
