@@ -30,15 +30,17 @@ services:
       SIMULATOR_NIFI_HOST: "${SIMULATOR_NIFI_HOST:-180.75.0.10}"
       SIMULATOR_NIFI_PORT: "${SIMULATOR_NIFI_PORT:-9080}"
       SIMULATOR_NIFI_PATH: "${SIMULATOR_NIFI_PATH:-aviat}"
-      SIMULATOR_AGENTICNOC_RUNTIME_URL: "${SIMULATOR_AGENTICNOC_RUNTIME_URL:-http://180.75.0.7:8000/api/stream/runtime/}"
+      # Service URLs and credentials are deployment inputs. An unset value is
+      # intentionally surfaced as unavailable by the Simulator UI.
+      SIMULATOR_AGENTICNOC_RUNTIME_URL: "${SIMULATOR_AGENTICNOC_RUNTIME_URL:-}"
       SIMULATOR_AGENTICNOC_BASE_URL: "${SIMULATOR_AGENTICNOC_BASE_URL:-}"
       SIMULATOR_AGENTICNOC_INTERNAL_TOKEN: "${SIMULATOR_AGENTICNOC_INTERNAL_TOKEN:-}"
+      SIMULATOR_AGENTICNOC_PUBLIC_URL: "${SIMULATOR_AGENTICNOC_PUBLIC_URL:-}"
       SIMULATOR_REDIS_HOST: "${SIMULATOR_REDIS_HOST:-180.75.0.15}"
       SIMULATOR_REDIS_PORT: "${SIMULATOR_REDIS_PORT:-6379}"
       # The internal replay endpoint is service-to-service and must fail
-      # closed.  Keep the demo token configurable through .env, with a
-      # non-empty local default that matches AgenticNOC's development value.
-      SIMULATOR_INTERNAL_TOKEN: "${SIMULATOR_INTERNAL_TOKEN:-agenticnoc-demo-internal-token}"
+      # closed when the deployment has not supplied its bearer credential.
+      SIMULATOR_INTERNAL_TOKEN: "${SIMULATOR_INTERNAL_TOKEN:-}"
     volumes:
       - /root/simulator/simulator:/app
       - simulator-data:/app/data

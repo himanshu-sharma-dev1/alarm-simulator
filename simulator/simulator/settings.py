@@ -49,10 +49,14 @@ SIMULATOR_NIFI_PORT = int(os.environ.get("SIMULATOR_NIFI_PORT", "9080"))
 SIMULATOR_NIFI_PATH = os.environ.get("SIMULATOR_NIFI_PATH", "aviat")
 SIMULATOR_MAX_RATE_EPS = float(os.environ.get("SIMULATOR_MAX_RATE_EPS", "100"))
 SIMULATOR_INTERNAL_TOKEN = os.environ.get("SIMULATOR_INTERNAL_TOKEN", "")
-SIMULATOR_AGENTICNOC_BASE_URL = os.environ.get("SIMULATOR_AGENTICNOC_BASE_URL", "")
+# The AgenticNOC service URL and credential are deployment inputs.  Never use
+# a guessed host or a committed token: an unset value must make the proxy
+# unavailable rather than silently downgrade authentication.
+SIMULATOR_AGENTICNOC_BASE_URL = os.environ.get("SIMULATOR_AGENTICNOC_BASE_URL", "").rstrip("/")
+SIMULATOR_AGENTICNOC_PUBLIC_URL = os.environ.get("SIMULATOR_AGENTICNOC_PUBLIC_URL", "").rstrip("/")
 SIMULATOR_AGENTICNOC_INTERNAL_TOKEN = os.environ.get("SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "")
 SIMULATOR_AGENTICNOC_RUNTIME_URL = os.environ.get(
-    "SIMULATOR_AGENTICNOC_RUNTIME_URL", "http://180.75.0.7:8000/api/stream/runtime/"
+    "SIMULATOR_AGENTICNOC_RUNTIME_URL", ""
 )
 
 _db_path = Path(os.environ.get("SIMULATOR_DB_PATH", str(BASE_DIR / "data" / "db.sqlite3")))

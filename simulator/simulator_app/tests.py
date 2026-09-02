@@ -38,10 +38,34 @@ class SimulatorApiTests(TestCase):
         self.assertNotIn("host", start.call_args.args[0])
         self.assertEqual(SimulationRun.objects.count(), 1)
 
-    def test_internal_status_accepts_unconfigured_token(self):
+    def test_internal_status_fails_closed_without_configured_token(self):
         response = self.client.get("/api/internal/status/")
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(SIMULATOR_AGENTICNOC_BASE_URL="", SIMULATOR_AGENTICNOC_INTERNAL_TOKEN="")
+    def test_scenario_proxy_fails_closed_without_agenticnoc_configuration(self):
+        self.client.force_login(self.user)
+        response = self.client.get("/api/scenarios/catalog/")
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(response.json().get("available", True))
+
+    @override_settings(
+        SIMULATOR_AGENTICNOC_BASE_URL="http://agenticnoc:8000",
+        SIMULATOR_AGENTICNOC_INTERNAL_TOKEN="agentic-token",
+    )
+    @patch("simulator_app.views.requests.get")
+    def test_preflight_proxy_forwards_case_and_bearer_token(self, get):
+        self.client.force_login(self.user)
+        upstream = get.return_value
+        upstream.status_code = 200
+        upstream.content = b'{"ready": true, "checks": []}'
+        upstream.json.return_value = {"ready": True, "checks": []}
+        response = self.client.get("/api/scenarios/preflight/?scenario=rain_fade&case_number=2")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("stats", response.json())
+        self.assertTrue(response.json()["ready"])
+        kwargs = get.call_args.kwargs
+        self.assertEqual(kwargs["params"], {"scenario": "rain_fade", "case_number": "2"})
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer agentic-token")
 
     @override_settings(SIMULATOR_INTERNAL_TOKEN="action-secret")
     @patch("simulator_app.views.engine.send_action_followups", return_value=[])
