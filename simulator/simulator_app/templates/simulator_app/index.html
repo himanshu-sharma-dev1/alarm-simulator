@@ -518,31 +518,31 @@
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
                                 <div style="font-size:22px;margin-bottom:4px">📡</div>
                                 <strong style="font-size:12px;display:block">PulseFeed</strong>
-                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 8001</span>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9019</span>
                             </div>
                             <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
                                 <div style="font-size:22px;margin-bottom:4px">🌊</div>
                                 <strong style="font-size:12px;display:block">Apache NiFi</strong>
-                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9080</span>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9001</span>
                             </div>
                             <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
                                 <div style="font-size:22px;margin-bottom:4px">🐰</div>
                                 <strong style="font-size:12px;display:block">RabbitMQ</strong>
-                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 5672</span>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 15674</span>
                             </div>
                             <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
                                 <div style="font-size:22px;margin-bottom:4px">⚡</div>
                                 <strong style="font-size:12px;display:block">ClickHouse PM</strong>
-                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 8123</span>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9017</span>
                             </div>
                             <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--primary);padding:14px;border-radius:var(--radius-md);box-shadow:var(--shadow-glow)">
                                 <div style="font-size:22px;margin-bottom:4px">🧠</div>
                                 <strong style="font-size:12px;display:block;color:var(--primary)">AgenticNOC</strong>
-                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 8000</span>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9015</span>
                             </div>
                         </div>
                     </div>
@@ -552,41 +552,41 @@
                         <div class="pipeline-node-card online">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                                 <strong>Apache NiFi Ingress</strong>
-                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">LISTENING :9080</span>
+                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">LISTENING :9001</span>
                             </div>
-                            <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">High-throughput ingestion processor receiving raw Aviat JSON alarm telemetry over HTTP.</p>
-                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Endpoint: /aviat-alarms</div>
-                            <a href="http://localhost:9080/nifi" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open NiFi Console</a>
+                            <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">High-throughput ingestion processor receiving raw Aviat JSON alarm telemetry.</p>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Endpoint: iktaratech.com:9001/nifi</div>
+                            <a href="http://iktaratech.com:9001/nifi" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open NiFi Console</a>
                         </div>
 
                         <div class="pipeline-node-card online">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                                 <strong>RabbitMQ Message Broker</strong>
-                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">ACTIVE :5672</span>
+                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">ACTIVE :15674</span>
                             </div>
                             <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">Guaranteed message queue routing telemetry across topics to streaming correlators.</p>
                             <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Topic: telemetry.alarms.aviat</div>
-                            <a href="http://localhost:15672" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open RabbitMQ Management</a>
+                            <a href="http://iktaratech.com:15674" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open RabbitMQ Management</a>
                         </div>
 
                         <div class="pipeline-node-card online">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                                 <strong>ClickHouse PM Store</strong>
-                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">PORT :8123</span>
+                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">PORT :9017</span>
                             </div>
                             <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">Ultra-fast columnar analytics store holding 15-minute PM waveform series (RSL, SNR, voltage, temp).</p>
-                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Database: agentic_noc</div>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Host: iktaratech.com:9017</div>
                             <span style="font-size:11.5px;color:var(--muted-foreground)">March–April Real Baseline</span>
                         </div>
 
                         <div class="pipeline-node-card online">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                                 <strong>AgenticNOC Multi-Agent Core</strong>
-                                <span class="status-badge" style="background:var(--primary);color:var(--primary-foreground);font-size:10px;padding:2px 6px;border-radius:4px">LANGGRAPH :8000</span>
+                                <span class="status-badge" style="background:var(--primary);color:var(--primary-foreground);font-size:10px;padding:2px 6px;border-radius:4px">LANGGRAPH :9015</span>
                             </div>
                             <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">5-agent cognitive orchestrator with Triage, Supervisor, Diagnostics, and RCA specialists.</p>
-                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Model: Mistral / Gemini Local</div>
-                            <a href="http://localhost:8000" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open AgenticNOC Dashboard</a>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">UI: iktaratech.com:9015</div>
+                            <a href="http://iktaratech.com:9015" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open AgenticNOC Dashboard</a>
                         </div>
                     </div>
 

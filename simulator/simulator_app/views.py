@@ -156,7 +156,7 @@ def simulator_status(request):
 def _internal_authorized(request):
     expected = str(getattr(settings, "SIMULATOR_INTERNAL_TOKEN", "") or "").strip()
     if not expected:
-        # Internal replay delivery is an authenticated service boundary.  A
+        # Internal replay delivery is an authenticated service boundary. A
         # missing token is configuration failure, never anonymous access.
         return False
     received = request.headers.get("Authorization", "")
@@ -443,6 +443,129 @@ def simulator_metrics(request):
         f"simulator_request_latency_p95_ms {float(latency.get('p95_ms') or 0)}",
     ]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+@require_POST
+@operator_required
+def inject_scenario_stream(request):
+    """Start a catalogued scenario through the authenticated AgenticNOC API."""
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "message": "Invalid JSON body."}, status=400)
+
+    scenario = str(payload.get("scenario") or "rain_fade").strip().lower()
+    try:
+        case_number = int(payload.get("case_number", 1) or 1)
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "message": "case_number must be 1 or 2."}, status=400)
+
+    agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
+    token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
+    if not agentic_base or not token:
+        return JsonResponse({"ok": False, "message": "AgenticNOC scenario service is not configured."}, status=503)
+    try:
+        response = requests.post(
+            f"{agentic_base}/api/demo/runs/",
+            json={"scenario": scenario, "case_number": case_number, "execution_profile": "demo_adaptive"},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=20,
+        )
+        data = response.json() if response.content else {}
+        if response.status_code in (200, 201, 202):
+            return JsonResponse({
+                "ok": True,
+                "demo_id": data.get("id"),
+                "scenario": scenario,
+                "case_number": case_number,
+                "phase": data.get("phase"),
+                "status": data.get("status"),
+                "simulator_run_id": data.get("simulator_run_id"),
+                "replay_cycle_id": data.get("replay_cycle_id"),
+                "incident_id": (data.get("incident") or {}).get("id"),
+                "incident_ref": (data.get("incident") or {}).get("reference_code"),
+                "agentic_url": f"{(getattr(settings, 'SIMULATOR_AGENTICNOC_PUBLIC_URL', '') or 'http://iktaratech.com:9015').rstrip('/')}/#incidentDetail/{(data.get('incident') or {}).get('id', '')}",
+                "hop_proofs": data.get("hop_proofs") or [],
+            }, status=200)
+        elif response.status_code == 409:
+            return JsonResponse({
+                "ok": False,
+                "message": data.get("detail") or "Another scenario run is active.",
+                "active_demo_id": data.get("active_demo_id"),
+                "active_demo": data.get("active_demo"),
+            }, status=409)
+        else:
+            return JsonResponse({
+                "ok": False,
+                "message": data.get("detail") or data.get("failure_reason") or f"AgenticNOC returned HTTP {response.status_code}",
+            }, status=response.status_code)
+    except Exception as exc:
+        return JsonResponse({"ok": False, "message": f"Failed to reach AgenticNOC: {str(exc)[:300]}"}, status=502)
+
+
+@require_GET
+@operator_required
+def scenario_catalog_proxy(request):
+    """Proxy the authoritative case catalog to the logged-in Simulator UI."""
+    del request
+    agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
+    token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
+    if not agentic_base or not token:
+        return JsonResponse({"status": "unavailable", "available": False, "error": "AgenticNOC scenario service is not configured"}, status=503)
+    try:
+        response = requests.get(
+            f"{agentic_base}/api/demo/scenarios/",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=8,
+        )
+        body = response.json() if response.content else {}
+        return JsonResponse(body, status=response.status_code)
+    except Exception as exc:
+        return JsonResponse({"status": "unavailable", "available": False, "error": str(exc)[:240]}, status=502)
+
+
+@require_GET
+@operator_required
+def scenario_preflight_proxy(request):
+    """Proxy the server-owned case/runtime preflight to the Simulator UI."""
+    agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
+    token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
+    if not agentic_base or not token:
+        return JsonResponse({"status": "unavailable", "available": False, "ready": False, "error": "AgenticNOC scenario service is not configured"}, status=503)
+    try:
+        response = requests.get(
+            f"{agentic_base}/api/demo/preflight/",
+            params={
+                "scenario": str(request.GET.get("scenario") or "").strip(),
+                "case_number": str(request.GET.get("case_number") or "1").strip(),
+            },
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+        body = response.json() if response.content else {}
+        return JsonResponse(body, status=response.status_code)
+    except Exception as exc:
+        return JsonResponse({"status": "unavailable", "ready": False, "error": str(exc)[:240]}, status=502)
+
+
+@require_GET
+@operator_required
+def poll_scenario_stream(request, demo_id):
+    """Poll progress of an active scenario ingress stream."""
+    agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
+    token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
+    if not agentic_base or not token:
+        return JsonResponse({"status": "unavailable", "error": "AgenticNOC scenario service is not configured"}, status=503)
+    try:
+        response = requests.get(f"{agentic_base}/api/demo/runs/{demo_id}/", headers={"Authorization": f"Bearer {token}"}, timeout=6)
+        data = response.json() if response.content else {}
+        if isinstance(data, dict):
+            incident_id = (data.get("incident") or {}).get("id")
+            public_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_PUBLIC_URL", "") or "http://iktaratech.com:9015").rstrip("/")
+            data["agentic_url"] = f"{public_base}/#incidentDetail/{incident_id}" if incident_id else f"{public_base}/#incidents"
+        return JsonResponse(data, status=response.status_code)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)[:200]}, status=502)
 
 
 class SimulatorLoginView(LoginView):

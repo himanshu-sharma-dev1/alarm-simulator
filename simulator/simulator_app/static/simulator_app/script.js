@@ -838,7 +838,7 @@ async function injectScenarioStream() {
 
         const scenInfo = SCENARIO_DETAILS[scenario] || {};
         const payloadPreview = {
-            transport: "HTTP/1.1 POST :9080/aviat-alarms",
+            transport: "HTTP/1.1 POST iktaratech.com:9001/aviat",
             timestamp: new Date().toISOString(),
             vendor: "Aviat Networks",
             scenario: scenario,
@@ -848,7 +848,7 @@ async function injectScenarioStream() {
             frequency_band: scenInfo.band || "18 GHz",
             injected_telemetry: scenInfo.telemetry || "Symmetric RSL fade & SNR threshold tracking",
             injected_alarms: (scenInfo.alarms && scenInfo.alarms.split(", ")) || ["ALARM_ASSERTED"],
-            status: "Delivered to Apache NiFi Ingress (:9080) -> RabbitMQ Exchange"
+            status: "Delivered to Apache NiFi Ingress (iktaratech.com:9001) -> RabbitMQ Exchange (:15674)"
         };
         const payloadEl = document.getElementById("scenarioPayloadContent");
         if (payloadEl) payloadEl.textContent = JSON.stringify(payloadPreview, null, 2);
@@ -980,6 +980,11 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                     completeEl.textContent = "↗ Open incident for RCA";
                 }
 
+                let resolvedUrl = data.agentic_url || agenticUrl || "http://iktaratech.com:9015/#incidents";
+                if (resolvedUrl.startsWith("/")) {
+                    resolvedUrl = "http://iktaratech.com:9015" + resolvedUrl;
+                }
+
                 detail.innerHTML = `
                     <div class="incident-ready-banner">
                         <div>
@@ -994,7 +999,7 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                             </div>
                         </div>
                         <div>
-                            <a href="${escapeHtml(agenticUrl || '/#incidents')}" target="_blank" rel="noopener" class="btn-open-agentic">
+                            <a href="${escapeHtml(resolvedUrl)}" target="_blank" rel="noopener" class="btn-open-agentic">
                                 👉 Open Incident in AgenticNOC ➔
                             </a>
                         </div>
