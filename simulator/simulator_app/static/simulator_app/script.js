@@ -3,6 +3,18 @@ let pipelinePollTimer = null;
 let historyPollTimer = null;
 let lastLogCount = 0;
 let controlsAllowed = false;
+let scenarioCatalog = [];
+let scenarioPreflight = null;
+let scenarioPreflightRequest = 0;
+
+function escapeHtml(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 
 function getCsrfToken() {
     const input = document.querySelector("[name=csrfmiddlewaretoken]");
@@ -37,6 +49,202 @@ function addLog(message, time) {
 
 function setConfigError(message) {
     document.getElementById("configError").textContent = message || "";
+}
+
+
+/* ---------------------------------------------------------- */
+/* Top-Level Navigation Tabs for Video Demo & Operational Modes*/
+/* ---------------------------------------------------------- */
+
+let currentSimTab = "scenarios";
+
+function switchSimTab(tabName) {
+    currentSimTab = tabName;
+    const tabMap = {
+        scenarios: { btn: "tabBtnScenarios", pane: "paneScenarios" },
+        continuous: { btn: "tabBtnContinuous", pane: "paneContinuous" },
+        pipeline: { btn: "tabBtnPipeline", pane: "panePipeline" },
+    };
+
+    Object.entries(tabMap).forEach(([name, ids]) => {
+        const btn = document.getElementById(ids.btn);
+        const pane = document.getElementById(ids.pane);
+        const isActive = name === tabName;
+        if (btn) btn.classList.toggle("active", isActive);
+        if (pane) {
+            pane.classList.toggle("active", isActive);
+            pane.style.display = isActive ? "block" : "none";
+        }
+    });
+
+    try {
+        localStorage.setItem("sim_active_tab", tabName);
+    } catch (_) {}
+}
+
+const SCENARIO_DETAILS = {
+    rain_fade: {
+        title: "Rain Fade (Atmospheric RF Attenuation)",
+        icon: "🌧️",
+        severity: "MAJOR",
+        severityColor: "var(--warning)",
+        category: "ENVIRONMENTAL",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "18 GHz Point-to-Point Microwave",
+        mechanism: "Heavy convective rain cell (45mm/hr) causing severe hydrometeor scattering and RF signal absorption along the line-of-sight path.",
+        telemetry: "Symmetric RSL fade from -42 dBm down to -68.4 dBm (-26.4 dB drop) on both near and far ends. SNR remains above 21 dB.",
+        alarms: "RSL_DEGRADED, RADIO_LINK_DEGRADED, ACM_MODULATION_FALLBACK",
+        expected_rca: "Atmospheric rain attenuation; no physical equipment replacement needed."
+    },
+    antenna_drift: {
+        title: "Antenna Drift (Mechanical Misalignment)",
+        icon: "📡",
+        severity: "MAJOR",
+        severityColor: "var(--warning)",
+        category: "PHYSICAL_PLANT",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "23 GHz Point-to-Point Microwave",
+        mechanism: "High wind gusts causing mechanical tower bracket slippage and antenna azimuth misalignment off main beam bore sight.",
+        telemetry: "Asymmetric persistent RSL loss (-24 dBm) with zero weather radar rain correlation. Dry atmosphere confirmed.",
+        alarms: "RSL_DEGRADED, RADIO_POOR_SIGNAL, BER_EXCEEDED",
+        expected_rca: "Antenna azimuth misalignment; mechanical dish re-alignment required."
+    },
+    hardware_failure: {
+        title: "Hardware / Transceiver Failure",
+        icon: "🔌",
+        severity: "CRITICAL",
+        severityColor: "var(--destructive)",
+        category: "HARDWARE",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "18 GHz ODU Transceiver",
+        mechanism: "ODU power amplifier (PA) bias current loss or local oscillator (LO) PLL unlock, abruptly ceasing RF transmission.",
+        telemetry: "Near-end reports severe Tx PA current fault / LO unlock; far-end records sudden total RSL loss down to noise floor (-90 dBm).",
+        alarms: "EQUIPMENT_FAIL, ODU_TX_FAIL, RADIO_LINK_DOWN",
+        expected_rca: "ODU transceiver hardware failure at AVT_SITE_01; dispatch field technician with replacement transceiver unit."
+    },
+    site_power_failure: {
+        title: "Site Power Failure (DC Plant Outage)",
+        icon: "⚡",
+        severity: "CRITICAL",
+        severityColor: "var(--destructive)",
+        category: "INFRASTRUCTURE",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "Site DC Power Plant",
+        mechanism: "Commercial utility grid AC loss; emergency diesel generator failed to start, causing DC battery bank discharge below 42V.",
+        telemetry: "Supply voltage dropping steadily from nominal -54.0V DC down to -41.2V DC over a 45-minute discharge curve.",
+        alarms: "MAINS_FAILURE, BATTERY_DISCHARGING, DC_LOW_VOLTAGE_ALARM",
+        expected_rca: "Site utility power loss and battery exhaustion; dispatch emergency mobile generator to AVT_SITE_01."
+    },
+    protection_switch: {
+        title: "1+1 HSB Protection Switch Failover",
+        icon: "🛡️",
+        severity: "WARNING",
+        severityColor: "var(--warning)",
+        category: "CONFIGURATION",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "18 GHz 1+1 Hot-Standby Protected Pair",
+        mechanism: "Working channel degradation triggering autonomous hitless protection switchover to standby protection channel.",
+        telemetry: "Protection state transitions from 'Working Normal' to 'Protect Active'; brief 12ms switching glitch with zero user traffic loss.",
+        alarms: "PROTECTION_SWITCH_OCCURRED, CHANNEL_DEGRADED",
+        expected_rca: "Autonomous 1+1 protection switchover succeeded; inspect degradation on working channel radio."
+    },
+    capacity_congestion: {
+        title: "Capacity Congestion & ACM Fallback",
+        icon: "📊",
+        severity: "MAJOR",
+        severityColor: "var(--warning)",
+        category: "PERFORMANCE",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "Microwave Packet Ring Link",
+        mechanism: "Sustained traffic egress peak exceeding committed information rate (CIR), triggering queue buffer overflow and tail drops.",
+        telemetry: "Interface queue buffer utilization exceeding 98%; packet loss of 4.2%; latency jitter spiking from 1.2ms to 48ms.",
+        alarms: "INTERFACE_CONGESTION, PACKET_DISCARD_RATE_HIGH",
+        expected_rca: "Capacity exhaustion; recommend traffic reroute via secondary ring or bandwidth carrier upgrade."
+    },
+    flapping_link: {
+        title: "Intermittent Flapping Link",
+        icon: "🔄",
+        severity: "MAJOR",
+        severityColor: "var(--warning)",
+        category: "TRANSMISSION",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "18 GHz Microwave Link",
+        mechanism: "Damaged IF coaxial cable or loose waveguide flange connector causing intermittent RF signal loss under wind vibration.",
+        telemetry: "14 link state transitions (Up/Down) within 15 minutes; rapid RSL oscillation between -44 dBm and -85 dBm.",
+        alarms: "RADIO_LINK_FLAPPING, SYNC_LOSS, EXCESSIVE_BIT_ERRORS",
+        expected_rca: "Physical cable or connector degradation; inspect IF jumper cable and waveguide flange at tower base."
+    },
+    node_isolation: {
+        title: "Hub / Node Reachability Isolation",
+        icon: "🌐",
+        severity: "CRITICAL",
+        severityColor: "var(--destructive)",
+        category: "TOPOLOGY",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ 3 Downstream Terminals",
+        band: "Microwave Star / Hub Cluster",
+        mechanism: "Aggregator switch port shutdown or upstream ring fiber cut isolating entire microwave cluster from IP core.",
+        telemetry: "Simultaneous loss of SNMP and telemetry heartbeats from 4 nodes across 2 adjacent sites.",
+        alarms: "NODE_UNREACHABLE, BGP_NEIGHBOR_DOWN, MPLS_LSP_DOWN",
+        expected_rca: "Upstream aggregation isolation; verify backhaul fiber link to regional point of presence."
+    },
+    config_drift: {
+        title: "Parameter & Frequency Config Drift",
+        icon: "⚙️",
+        severity: "MAJOR",
+        severityColor: "var(--warning)",
+        category: "CONFIGURATION",
+        link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
+        band: "18 GHz Carrier Frequency",
+        mechanism: "Unauthorized operator parameter modification causing TX/RX carrier frequency shift (+50 MHz) and channel mismatch.",
+        telemetry: "Demodulator lock failure with nominal TX power (+22 dBm) but zero valid frame reception.",
+        alarms: "CONFIG_MISMATCH, CARRIER_ACQUISITION_FAIL",
+        expected_rca: "Configuration drift detected against golden template; trigger automated rollback to Aviat baseline profile."
+    },
+    environmental_alarm: {
+        title: "Shelter / Cabinet Thermal Overheat",
+        icon: "🌡️",
+        severity: "MAJOR",
+        severityColor: "var(--warning)",
+        category: "ENVIRONMENTAL",
+        link: "AVT_UEMWSWB01 (Hop 0) · Site AVT_SITE_01",
+        band: "Indoor Unit (IDU) Telemetry",
+        mechanism: "Telecom equipment shelter HVAC compressor failure, causing ambient indoor temperature to climb to +58°C.",
+        telemetry: "Chassis thermal sensor reports +62.4°C (threshold: +55°C); fan speed forced to 100% maximum RPM.",
+        alarms: "CABINET_HIGH_TEMP, HVAC_UNIT_FAILURE",
+        expected_rca: "Shelter cooling system failure; dispatch HVAC emergency repair team to AVT_SITE_01."
+    }
+};
+
+function updateScenarioDeepDive(scenarioKey) {
+    const info = SCENARIO_DETAILS[scenarioKey] || SCENARIO_DETAILS.rain_fade;
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setVal("scenIcon", info.icon);
+    setVal("scenTitle", info.title);
+    setVal("scenCategory", info.category);
+    setVal("scenSeverity", info.severity);
+    const sevEl = document.getElementById("scenSeverity");
+    if (sevEl) {
+        sevEl.style.color = info.severityColor || "var(--warning)";
+        sevEl.style.background = `color-mix(in oklab, ${info.severityColor || "var(--warning)"} 18%, transparent)`;
+    }
+    setVal("scenLink", info.link);
+    setVal("scenBand", info.band);
+    setVal("scenMechanism", info.mechanism);
+    setVal("scenTelemetry", info.telemetry);
+    setVal("scenAlarms", info.alarms);
+    setVal("scenExpectedRCA", info.expected_rca);
+}
+
+function onScenarioSelectChange() {
+    const sel = document.getElementById("scenarioSelect");
+    if (sel) {
+        updateScenarioDeepDive(sel.value);
+        loadScenarioPreflight();
+    }
+}
+
+function onCaseVariantChange() {
+    loadScenarioPreflight();
 }
 
 
@@ -157,6 +365,15 @@ function applyStatus(data) {
     document.getElementById("flowEndpoint").textContent = data.target || "server-managed";
     document.getElementById("flowSourceLabel").textContent = data.vendor ? data.vendor.toUpperCase() : "—";
 
+    const contBadge = document.getElementById("tabContinuousBadge");
+    if (contBadge) {
+        if (data.status === "running") {
+            contBadge.innerHTML = `<span class="status-dot running" style="width:7px;height:7px;display:inline-block;margin-right:4px"></span> RUNNING`;
+        } else {
+            contBadge.textContent = "NiFi / RabbitMQ";
+        }
+    }
+
     // Only append log lines new since the last poll; if the log shrank, a
     // fresh run started server-side, so resync from scratch.
     if (data.logs.length < lastLogCount) {
@@ -224,6 +441,124 @@ async function loadConfig() {
         syncProfile();
     } catch (err) {
         document.getElementById("managedTarget").textContent = "Target configuration unavailable";
+    }
+    // Scenario selection is an independent authenticated service boundary;
+    // a status/config probe must not prevent the catalog from loading.
+    await loadScenarioCatalog();
+}
+
+async function loadScenarioCatalog() {
+    const scenarioSelect = document.getElementById("scenarioSelect");
+    const caseSelect = document.getElementById("caseVariantSelect");
+    if (!scenarioSelect || !caseSelect) return;
+    try {
+        const response = await fetch("/api/scenarios/catalog/");
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.scenarios)) throw new Error(data.error || data.detail || "catalog unavailable");
+        scenarioCatalog = data.scenarios;
+        scenarioSelect.replaceChildren();
+        scenarioCatalog.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.scenario;
+            option.textContent = item.display_name || item.scenario;
+            scenarioSelect.appendChild(option);
+        });
+        const refreshCases = () => {
+            const selected = scenarioCatalog.find((item) => item.scenario === scenarioSelect.value);
+            caseSelect.replaceChildren();
+            (selected && selected.cases || []).forEach((item) => {
+                const option = document.createElement("option");
+                option.value = String(item.case_number);
+                option.textContent = `Case ${item.case_number}: ${item.title || item.difficulty || "validated scenario"}`;
+                option.disabled = item.runnable === false;
+                caseSelect.appendChild(option);
+            });
+            if (!caseSelect.options.length) {
+                const option = document.createElement("option");
+                option.value = "1";
+                option.textContent = "No validated cases available";
+                option.disabled = true;
+                caseSelect.appendChild(option);
+            }
+            updateScenarioDeepDive(scenarioSelect.value);
+            loadScenarioPreflight();
+        };
+        scenarioSelect.addEventListener("change", refreshCases);
+        refreshCases();
+    } catch (err) {
+        const status = document.getElementById("scenarioInjectStatus");
+        if (status) status.textContent = "Scenario catalog unavailable; sign in or check AgenticNOC service configuration.";
+        const injectButton = document.getElementById("injectScenarioBtn");
+        if (injectButton) injectButton.disabled = true;
+        const badge = document.getElementById("scenarioPreflightBadge");
+        if (badge) {
+            badge.textContent = "UNAVAILABLE";
+            badge.style.background = "#64748b";
+        }
+        const summary = document.getElementById("scenarioPreflightSummary");
+        if (summary) summary.textContent = "Scenario catalog unavailable; scenario injection is paused.";
+    }
+}
+
+async function loadScenarioPreflight() {
+    const scenarioSelect = document.getElementById("scenarioSelect");
+    const caseSelect = document.getElementById("caseVariantSelect");
+    const summary = document.getElementById("scenarioPreflightSummary");
+    const checksEl = document.getElementById("scenarioPreflightChecks");
+    const badge = document.getElementById("scenarioPreflightBadge");
+    const card = document.getElementById("scenarioPreflightCard");
+    const injectButton = document.getElementById("injectScenarioBtn");
+    if (!scenarioSelect || !caseSelect || !summary) return;
+    const requestId = ++scenarioPreflightRequest;
+    const requestedScenario = scenarioSelect.value;
+    const requestedCase = caseSelect.value || "1";
+    scenarioPreflight = null;
+    summary.textContent = "Checking selected case and live dependencies…";
+    if (checksEl) checksEl.textContent = "Preflight in progress…";
+    try {
+        const query = new URLSearchParams({ scenario: requestedScenario, case_number: requestedCase });
+        const response = await fetch(`/api/scenarios/preflight/?${query.toString()}`);
+        const data = await response.json();
+        if (requestId !== scenarioPreflightRequest || requestedScenario !== scenarioSelect.value || requestedCase !== (caseSelect.value || "1")) return;
+        scenarioPreflight = data;
+        const ready = response.ok && data.ready === true;
+        summary.textContent = ready
+            ? "Selected case and required stream dependencies are ready."
+            : (data.error || "Selected case is not ready for a live ingress run.");
+        summary.style.color = ready ? "#166534" : "#9a3412";
+        if (badge) {
+            badge.textContent = ready ? "READY" : "BLOCKED";
+            badge.style.background = ready ? "#22c55e" : "#ea580c";
+        }
+        if (card) {
+            card.style.background = ready ? "#f0fdf4" : "#fff7ed";
+            card.style.borderColor = ready ? "#bbf7d0" : "#fed7aa";
+        }
+        if (checksEl) {
+            const checks = Array.isArray(data.checks) ? data.checks : [];
+            checksEl.textContent = checks.length
+                ? checks.map((item) => `${item.status === "ok" ? "✓" : item.status === "warning" ? "!" : "✕"} ${item.name}: ${item.detail || item.observed_status || item.status}`).join(" · ")
+                : "No preflight checks returned.";
+        }
+        // Keep the server as the authority, but prevent an operator from
+        // starting a known-blocked case and receiving a confusing transport
+        // error several hops later.
+        if (injectButton) injectButton.disabled = !ready;
+    } catch (err) {
+        if (requestId !== scenarioPreflightRequest || requestedScenario !== scenarioSelect.value || requestedCase !== (caseSelect.value || "1")) return;
+        scenarioPreflight = { ready: false, error: "Preflight service unavailable" };
+        summary.textContent = "Preflight service unavailable; scenario injection is paused.";
+        summary.style.color = "#9a3412";
+        if (badge) {
+            badge.textContent = "UNAVAILABLE";
+            badge.style.background = "#64748b";
+        }
+        if (card) {
+            card.style.background = "#f8fafc";
+            card.style.borderColor = "#cbd5e1";
+        }
+        if (checksEl) checksEl.textContent = String(err && err.message || "preflight request failed");
+        if (injectButton) injectButton.disabled = true;
     }
 }
 
@@ -431,6 +766,12 @@ function clearLog() {
 /* ---------------------------------------------------------- */
 
 document.addEventListener("DOMContentLoaded", () => {
+    let savedTab = "scenarios";
+    try {
+        savedTab = localStorage.getItem("sim_active_tab") || "scenarios";
+    } catch (_) {}
+    switchSimTab(savedTab);
+
     loadConfig();
     const runMode = document.getElementById("runMode");
     if (runMode) runMode.addEventListener("change", () => {
@@ -447,3 +788,226 @@ document.addEventListener("DOMContentLoaded", () => {
     pollHistory();
     pollPipeline();
 });
+
+
+/* ---------------------------------------------------------- */
+/* Scenario Ingress & Pipeline Hop Tracker                    */
+/* ---------------------------------------------------------- */
+
+let scenarioPollTimer = null;
+
+async function injectScenarioStream() {
+    const scenario = document.getElementById("scenarioSelect").value;
+    const caseNumber = parseInt(document.getElementById("caseVariantSelect").value, 10) || 1;
+    const btn = document.getElementById("injectScenarioBtn");
+    const statusText = document.getElementById("scenarioInjectStatus");
+    const tracker = document.getElementById("pipelineJourneyTracker");
+    const detail = document.getElementById("journeyDetail");
+
+    btn.disabled = true;
+    statusText.textContent = "Starting validated scenario stream...";
+    tracker.style.display = "block";
+
+    // Reset steps
+    setStepActive("stepSim", true, "1. Simulator Dispatched");
+    setStepActive("stepNifi", false, "2. NiFi Ingress (9080)");
+    setStepActive("stepRabbit", false, "3. RabbitMQ Ingested");
+    setStepActive("stepNoc", false, "4. AgenticNOC Materialized");
+    detail.innerHTML = `<em>Initializing ${escapeHtml(scenario)} (Case ${escapeHtml(caseNumber)})...</em>`;
+
+    try {
+        const response = await fetch("/api/scenarios/inject/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCsrfToken(),
+            },
+            body: JSON.stringify({ scenario: scenario, case_number: caseNumber }),
+        });
+
+        const data = await response.json();
+        if (!data.ok) {
+            statusText.textContent = `❌ ${data.message || "Failed to inject scenario"}`;
+            btn.disabled = false;
+            return;
+        }
+
+        statusText.textContent = `✅ Scenario accepted · Run ${data.demo_id || "—"}`;
+        setStepActive("stepNifi", false, "2. NiFi delivery pending");
+        detail.innerHTML = `<strong>Cycle:</strong> <code>${escapeHtml(data.replay_cycle_id)}</code> | <strong>Simulator Run:</strong> <code>${escapeHtml(data.simulator_run_id)}</code>`;
+
+        const scenInfo = SCENARIO_DETAILS[scenario] || {};
+        const payloadPreview = {
+            transport: "HTTP/1.1 POST :9080/aviat-alarms",
+            timestamp: new Date().toISOString(),
+            vendor: "Aviat Networks",
+            scenario: scenario,
+            case_variant: caseNumber,
+            cycle_id: data.replay_cycle_id,
+            target_link: scenInfo.link || "AVT_UEMWSWB01 ➔ AVT_UEMWBSNA01",
+            frequency_band: scenInfo.band || "18 GHz",
+            injected_telemetry: scenInfo.telemetry || "Symmetric RSL fade & SNR threshold tracking",
+            injected_alarms: (scenInfo.alarms && scenInfo.alarms.split(", ")) || ["ALARM_ASSERTED"],
+            status: "Delivered to Apache NiFi Ingress (:9080) -> RabbitMQ Exchange"
+        };
+        const payloadEl = document.getElementById("scenarioPayloadContent");
+        if (payloadEl) payloadEl.textContent = JSON.stringify(payloadPreview, null, 2);
+
+        pollScenarioPipeline(data.demo_id, data.agentic_url);
+    } catch (err) {
+        statusText.textContent = `❌ Error: ${err}`;
+        btn.disabled = false;
+    }
+}
+
+function setStepActive(elemId, isActive, text) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    if (isActive) {
+        el.style.background = "#dcfce7";
+        el.style.color = "#15803d";
+        el.style.fontWeight = "600";
+    } else {
+        el.style.background = "#f1f5f9";
+        el.style.color = "#64748b";
+        el.style.fontWeight = "400";
+    }
+    if (text) el.textContent = text;
+}
+
+function pollScenarioPipeline(demoId, agenticUrl) {
+    if (scenarioPollTimer) clearInterval(scenarioPollTimer);
+    const btn = document.getElementById("injectScenarioBtn");
+    const detail = document.getElementById("journeyDetail");
+    const statusText = document.getElementById("scenarioInjectStatus");
+
+    let attempts = 0;
+    scenarioPollTimer = setInterval(async () => {
+        attempts++;
+        if (attempts > 30) {
+            clearInterval(scenarioPollTimer);
+            btn.disabled = false;
+            statusText.textContent = "⏳ Scenario accepted · pipeline still pending";
+            setStepActive("stepNifi", false, "2. NiFi delivery not yet observed");
+            const pendingRabbit = document.getElementById("stepRabbit");
+            if (pendingRabbit) {
+                pendingRabbit.style.background = "#fff7ed";
+                pendingRabbit.style.color = "#c2410c";
+                pendingRabbit.style.fontWeight = "600";
+                pendingRabbit.textContent = "↻ 3. RabbitMQ/correlator still pending";
+            }
+            const pendingNoc = document.getElementById("stepNoc");
+            if (pendingNoc) {
+                pendingNoc.style.background = "#fff7ed";
+                pendingNoc.style.color = "#c2410c";
+                pendingNoc.style.fontWeight = "600";
+                pendingNoc.textContent = "↻ 4. AgenticNOC incident not observed";
+            }
+            const investigating = document.getElementById("phaseStepInvestigating");
+            if (investigating) {
+                investigating.style.borderTopColor = "#f59e0b";
+                investigating.style.color = "#b45309";
+                investigating.textContent = "↻ Awaiting AgenticNOC materialization";
+            }
+            const completed = document.getElementById("phaseStepCompleted");
+            if (completed) {
+                completed.style.borderTopColor = "#f59e0b";
+                completed.style.color = "#b45309";
+                completed.textContent = "↻ RCA not yet available";
+            }
+            detail.innerHTML = `
+                <div style="background:#fff7ed;padding:10px 14px;border-radius:6px;border:1px solid #fed7aa;margin-top:6px">
+                    <strong>Pipeline still processing</strong><br/>
+                    <span>No Incident was observed during the UI polling window. The run remains in progress; no completion is inferred.</span>
+                    <div style="margin-top:6px;color:#9a3412">Refresh AgenticNOC Incidents or inspect the streaming runtime before retrying this cycle.</div>
+                </div>
+            `;
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/scenarios/poll/${demoId}/`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+
+            const phase = data.phase || "";
+            const status = data.status || "";
+            const inc = data.incident || {};
+
+            const proofs = Array.isArray(data.hop_proofs) ? data.hop_proofs : [];
+            const proofStatus = (name) => {
+                const entries = proofs.filter((item) => item && item.hop === name);
+                return entries.length ? entries[entries.length - 1] : null;
+            };
+            const simulatorProof = proofStatus("simulator");
+            const nifiProof = proofStatus("nifi");
+            const rabbitProof = proofStatus("rabbitmq");
+            const materializerProof = proofStatus("incident_materializer");
+            if (simulatorProof) setStepActive("stepSim", simulatorProof.status === "accepted", "1. Simulator accepted");
+            setStepActive("stepNifi", Boolean(nifiProof && nifiProof.status === "delivered"), nifiProof ? "✓ 2. NiFi delivery confirmed" : "2. NiFi delivery pending");
+            setStepActive("stepRabbit", Boolean(rabbitProof && rabbitProof.status === "consumed"), rabbitProof ? "✓ 3. RabbitMQ/correlator confirmed" : "3. RabbitMQ/correlator pending");
+
+            if (inc && inc.id) {
+                const incidentNode = typeof inc.primary_node === "object" && inc.primary_node
+                    ? (inc.primary_node.node_id || inc.primary_node.id || "not recorded")
+                    : (inc.primary_node || inc.node_id || "not recorded");
+                const incidentSeverity = inc.root_severity || inc.severity || "not recorded";
+                setStepActive("stepNoc", Boolean(materializerProof || inc.id), "✓ 4. Incident materialized");
+                statusText.textContent = `✅ Incident ${inc.reference_code || `#${inc.id}`} materialized`;
+
+                const matEl = document.getElementById("phaseStepMaterialized");
+                if (matEl) {
+                    matEl.style.borderTopColor = "#22c55e";
+                    matEl.style.color = "#15803d";
+                    matEl.textContent = "✓ Incident materialized";
+                }
+                const streamEl = document.getElementById("phaseStepStreaming");
+                if (streamEl) {
+                    streamEl.style.borderTopColor = "#22c55e";
+                    streamEl.style.color = "#15803d";
+                    streamEl.textContent = "✓ Simulator → NiFi → RabbitMQ";
+                }
+                const invEl = document.getElementById("phaseStepInvestigating");
+                if (invEl) {
+                    invEl.style.borderTopColor = "#3b82f6";
+                    invEl.style.color = "#1d4ed8";
+                    invEl.textContent = "● LangGraph investigation ready";
+                }
+                const completeEl = document.getElementById("phaseStepCompleted");
+                if (completeEl) {
+                    completeEl.style.borderTopColor = "#cbd5e1";
+                    completeEl.style.color = "#64748b";
+                    completeEl.textContent = "↗ Open incident for RCA";
+                }
+
+                detail.innerHTML = `
+                    <div class="incident-ready-banner">
+                        <div>
+                            <div style="font-weight:700;font-size:14px;color:#15803d;display:flex;align-items:center;gap:6px">
+                                <span>🎉</span> Stream Materialized in AgenticNOC
+                            </div>
+                            <div style="font-family:var(--font-mono);font-size:12px;color:#166534;margin-top:4px">
+                                Incident: <strong>${escapeHtml(inc.reference_code || `#${inc.id}`)}</strong> &bull; Severity: <strong>${escapeHtml(incidentSeverity)}</strong> &bull; Node: <strong>${escapeHtml(incidentNode)}</strong>
+                            </div>
+                            <div style="font-size:11px;color:#15803d;margin-top:2px">
+                                Autonomous 5-agent LangGraph workflow initiated · ClickHouse PM evidence sealed
+                            </div>
+                        </div>
+                        <div>
+                            <a href="${escapeHtml(agenticUrl || '/#incidents')}" target="_blank" rel="noopener" class="btn-open-agentic">
+                                👉 Open Incident in AgenticNOC ➔
+                            </a>
+                        </div>
+                    </div>
+                `;
+                clearInterval(scenarioPollTimer);
+                btn.disabled = false;
+            }
+            if (["failed", "cancelled"].includes(status)) {
+                statusText.textContent = `⚠ ${data.failure_reason || "Scenario run stopped"}`;
+                clearInterval(scenarioPollTimer);
+                btn.disabled = false;
+            }
+        } catch (_) {}
+    }, 1500);
+}

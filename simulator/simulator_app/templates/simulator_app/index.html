@@ -42,95 +42,282 @@
         </div>
     </header>
 
+    <!-- Top-Level Navigation Tabs for Video Demo & Operational Modes -->
+    <nav class="sim-nav-bar">
+        <div class="sim-nav-tabs">
+            <button type="button" class="sim-nav-tab active" id="tabBtnScenarios" onclick="switchSimTab('scenarios')">
+                <span class="tab-icon">⚡</span>
+                <span class="tab-label">Transmission Scenarios</span>
+                <span class="tab-badge">10 Scenarios · 20 Cases</span>
+            </button>
+            <button type="button" class="sim-nav-tab" id="tabBtnContinuous" onclick="switchSimTab('continuous')">
+                <span class="tab-icon">🌊</span>
+                <span class="tab-label">Continuous Traffic Engine</span>
+                <span class="tab-badge" id="tabContinuousBadge">NiFi / RabbitMQ</span>
+            </button>
+            <button type="button" class="sim-nav-tab" id="tabBtnPipeline" onclick="switchSimTab('pipeline')">
+                <span class="tab-icon">🗺️</span>
+                <span class="tab-label">Pipeline Topology &amp; Health</span>
+                <span class="tab-badge">Live Endpoints</span>
+            </button>
+        </div>
+    </nav>
 
     <main class="main-content">
 
         <!-- ============================================================
-             CONFIG SCREEN — the only thing visible on load. Just the
-             form and a Start button, nothing to scroll past.
+             TAB PANE 1: TRANSMISSION SCENARIO LAB (Hero View for Demo)
              ============================================================ -->
-        <section id="configScreen" class="screen active">
+        <div id="paneScenarios" class="sim-tab-pane active">
             <div class="config-wrap">
 
-                <section class="card">
-
+                <section class="card" style="border-top: 3px solid var(--primary);">
                     <div class="card-header">
                         <div>
-                            <h2>Simulator Configuration</h2>
-                    <p>Choose a source profile; the active cPlatform NiFi target is protected from accidental edits.</p>
+                            <h2>⚡ Transmission Scenario Ingress &amp; Pipeline Injection</h2>
+                            <p>Inject real-world Aviat baseline microwave transmission faults directly into Apache NiFi (Port 9080) &rarr; RabbitMQ &rarr; AgenticNOC.</p>
                         </div>
+                        <span class="sim-badge" style="background:color-mix(in oklab, var(--primary) 15%, transparent);color:var(--primary);font-family:var(--font-mono);font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid color-mix(in oklab, var(--primary) 30%, transparent)">
+                            Aviat March–April Baseline
+                        </span>
                     </div>
 
                     <div class="form-grid">
-
                         <div class="form-group">
-                            <label for="profile">Source Profile</label>
-                            <select id="profile">
-                                <option value="ftp">Real FTP source</option>
-                                <option value="end_to_end_acceptance">Deterministic end-to-end acceptance (2 events)</option>
+                            <label for="scenarioSelect">Transmission Fault Scenario</label>
+                            <select id="scenarioSelect" onchange="onScenarioSelectChange()">
+                                <option value="rain_fade">🌧️ Rain Fade (Atmospheric RF Attenuation)</option>
+                                <option value="antenna_drift">📡 Antenna Drift (Mechanical Misalignment)</option>
+                                <option value="hardware_failure">🔌 Hardware / Transceiver Failure</option>
+                                <option value="site_power_failure">⚡ Site Power Failure (DC Plant Outage)</option>
+                                <option value="protection_switch">🛡️ 1+1 HSB Protection Switch Failover</option>
+                                <option value="capacity_congestion">📊 Capacity Congestion &amp; ACM Fallback</option>
+                                <option value="flapping_link">🔄 Intermittent Flapping Link</option>
+                                <option value="node_isolation">🌐 Hub / Node Reachability Isolation</option>
+                                <option value="config_drift">⚙️ Parameter &amp; Frequency Config Drift</option>
+                                <option value="environmental_alarm">🌡️ Shelter / Cabinet Thermal Overheat</option>
                             </select>
-                            <span class="help-text">Acceptance mode still uses the live NiFi/RabbitMQ/database path.</span>
+                            <span class="help-text">Observed Aviat 15-min baseline + bounded case transformation</span>
                         </div>
 
                         <div class="form-group">
-                            <label for="vendor">Vendor</label>
-                            <select id="vendor">
-                                <option value="aviat">Aviat</option>
-                                <option value="cambium">Cambium</option>
+                            <label for="caseVariantSelect">Scenario Complexity Variant</label>
+                            <select id="caseVariantSelect" onchange="onCaseVariantChange()">
+                                <option value="1">Case 1: Canonical / Standard (2-Node Link Degradation)</option>
+                                <option value="2">Case 2: Hard / Cascading (Multi-Hop Downstream Symptoms)</option>
                             </select>
-                            <span class="help-text">Determines the alarm format</span>
+                            <span class="help-text">Controls topology blast radius and secondary alarms</span>
                         </div>
-
-                        <div class="form-group">
-                            <label for="rate">Send Rate</label>
-                            <div class="input-with-unit">
-                                <input type="number" id="rate" value="1" min="0.1" max="100" step="0.1">
-                                <span>alarms/sec</span>
-                            </div>
-                            <span class="help-text" id="rateHelp">Loading server limit…</span>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="runMode">Run Mode</label>
-                            <select id="runMode">
-                                <option value="continuous">Continuous until stopped</option>
-                                <option value="bounded">Bounded acceptance run</option>
-                            </select>
-                            <span class="help-text">Bounded runs stop after the event limit.</span>
-                        </div>
-
-                        <div class="form-group" id="eventLimitGroup" style="display:none">
-                            <label for="eventLimit">Event Limit</label>
-                            <input type="number" id="eventLimit" value="100" min="1" step="1">
-                            <span class="help-text">Useful for repeatable end-to-end verification.</span>
-                        </div>
-
-                        <div class="form-group full-width">
-                            <label>Managed Target</label>
-                            <div class="managed-target" id="managedTarget">Loading cPlatform target…</div>
-                        </div>
-
                     </div>
 
-                    <div class="actions">
+                    <!-- Dynamic Scenario Deep-Dive Card -->
+                    <div id="scenarioDeepDiveCard" class="scenario-deepdive-card">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <span id="scenIcon" style="font-size:22px">🌧️</span>
+                                <strong id="scenTitle" style="font-size:14px;color:var(--foreground)">Rain Fade (Atmospheric RF Attenuation)</strong>
+                            </div>
+                            <div style="display:flex;gap:6px">
+                                <span id="scenCategory" class="sim-badge" style="background:var(--secondary);color:var(--muted-foreground);font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid var(--border)">ENVIRONMENTAL</span>
+                                <span id="scenSeverity" class="sim-badge" style="background:color-mix(in oklab, var(--warning) 18%, transparent);color:var(--warning);font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700">MAJOR</span>
+                            </div>
+                        </div>
+
+                        <div class="scenario-meta-grid">
+                            <div class="scenario-meta-item">
+                                <span>Microwave Link</span>
+                                <strong id="scenLink">AVT_UEMWSWB01 ➔ AVT_UEMWBSNA01</strong>
+                            </div>
+                            <div class="scenario-meta-item">
+                                <span>Frequency / Band</span>
+                                <strong id="scenBand">18 GHz Point-to-Point</strong>
+                            </div>
+                            <div class="scenario-meta-item">
+                                <span>Physical Failure Mechanism</span>
+                                <div id="scenMechanism" style="font-size:11.5px;color:var(--muted-foreground);margin-top:4px;line-height:1.4">Heavy convective rain cell causing severe hydrometeor scattering along line-of-sight path.</div>
+                            </div>
+                            <div class="scenario-meta-item">
+                                <span>Injected Telemetry Deltas</span>
+                                <div id="scenTelemetry" style="font-size:11.5px;color:var(--muted-foreground);margin-top:4px;line-height:1.4">Symmetric RSL fade (-26 dBm drop) on both near and far ends. SNR remains above 21 dB.</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11.5px">
+                            <div>
+                                <span style="color:var(--muted-foreground)">Expected Alarms:</span>
+                                <span id="scenAlarms" style="font-family:var(--font-mono);color:var(--primary);margin-left:4px">RSL_DEGRADED, RADIO_LINK_DEGRADED</span>
+                            </div>
+                            <div>
+                                <span style="color:var(--muted-foreground)">Expected Root Cause:</span>
+                                <span id="scenExpectedRCA" style="color:var(--foreground);margin-left:4px">Atmospheric rain attenuation</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preflight Checks Banner -->
+                    <div id="scenarioPreflightCard" style="margin-top: 16px; padding: 12px 16px; background: var(--secondary); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 11.5px;">
+                        <div style="font-weight: 600; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+                            <span><i class="ti ti-shield-check"></i> Operator preflight · selected case and live dependencies</span>
+                            <span id="scenarioPreflightBadge" style="background: #94a3b8; color: #fff; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700;">CHECKING</span>
+                        </div>
+                        <div id="scenarioPreflightSummary" style="color: var(--muted-foreground);">Load the authoritative scenario catalog to begin.</div>
+                        <div id="scenarioPreflightChecks" style="margin-top: 5px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: 10.5px;">No checks returned.</div>
+                    </div>
+
+                    <div class="actions" style="margin-top: 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
                         <button
                             type="button"
-                            id="startButton"
+                            id="injectScenarioBtn"
                             class="btn btn-start"
-                            onclick="startSimulator()"
+                            onclick="injectScenarioStream()"
+                            style="background: var(--primary); color: var(--primary-foreground);"
                         >
-                            <span>&#9654;</span>
-                            Start Simulator
+                            <span>⚡</span>
+                            Inject Scenario Stream
                         </button>
+                        <span id="scenarioInjectStatus" style="font-size: 13px; font-family: var(--font-mono); color: var(--muted-foreground);"></span>
                     </div>
 
-                    <p id="configError" class="config-error"></p>
-                    {% if not can_control %}<p class="auth-note">You can inspect live status. <a href="/login/">Sign in as a simulator operator</a> to start or stop runs.</p>{% endif %}
+                    <!-- Pipeline Ingress Hop Tracker & Lifecycle Milestones -->
+                    <div id="pipelineJourneyTracker" class="hop-tracker-container" style="display: none;">
+                        <div style="font-size: 13px; font-weight: 600; color: var(--foreground); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <span>🚀</span> Live Stream Ingress &amp; Lifecycle Journey
+                        </div>
+
+                        <!-- Phase Progression Line -->
+                        <div id="phaseProgressionBar" style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 12px;">
+                            <div style="flex: 1; min-width: 110px; border-top: 3px solid #22c55e; padding-top: 4px; font-size: 10.5px; color: #22c55e;">✓ Recipe created</div>
+                            <div id="phaseStepStreaming" style="flex: 1; min-width: 120px; border-top: 3px solid var(--accent); padding-top: 4px; font-size: 10.5px; color: var(--accent);">● Simulator → NiFi → RabbitMQ</div>
+                            <div id="phaseStepMaterialized" style="flex: 1; min-width: 120px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ Incident materialized</div>
+                            <div id="phaseStepInvestigating" style="flex: 1; min-width: 140px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ LangGraph investigation</div>
+                            <div id="phaseStepCompleted" style="flex: 1; min-width: 110px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ RCA complete</div>
+                        </div>
+
+                        <div class="hop-steps-flow">
+                            <div id="stepSim" class="hop-step-pill active">
+                                <span>1. Simulator Dispatched</span>
+                            </div>
+                            <span class="hop-step-arrow">➔</span>
+                            <div id="stepNifi" class="hop-step-pill">
+                                <span>2. NiFi Ingress (9080)</span>
+                            </div>
+                            <span class="hop-step-arrow">➔</span>
+                            <div id="stepRabbit" class="hop-step-pill">
+                                <span>3. RabbitMQ Ingested</span>
+                            </div>
+                            <span class="hop-step-arrow">➔</span>
+                            <div id="stepNoc" class="hop-step-pill">
+                                <span>4. AgenticNOC Materialized</span>
+                            </div>
+                        </div>
+
+                        <div id="journeyDetail" style="margin-top: 14px; font-size: 12.5px; color: var(--foreground); line-height: 1.5;"></div>
+                    </div>
+
+                    <!-- Injected Alarm Payload Preview Drawer -->
+                    <details id="detailsScenarioPayload" style="margin-top:16px;background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px">
+                        <summary style="cursor:pointer;font-size:11.5px;color:var(--muted-foreground);display:flex;justify-content:space-between;align-items:center">
+                            <span><i class="ti ti-file-code" style="margin-right:4px"></i>View Dispatched Alarm &amp; PM Telemetry Payload</span>
+                            <span style="font-size:10px;font-family:var(--font-mono);color:var(--primary)">NiFi HTTP POST :9080</span>
+                        </summary>
+                        <div id="scenarioPayloadContent" style="margin-top:8px;font-family:var(--font-mono);font-size:11px;color:var(--foreground);max-height:260px;overflow:auto;white-space:pre-wrap;background:var(--card);padding:10px;border-radius:var(--radius-sm)">Select a scenario and click Inject to inspect the real-time payload dispatched into Apache NiFi.</div>
+                    </details>
 
                 </section>
 
             </div>
-        </section>
+        </div>
+
+        <!-- ============================================================
+             TAB PANE 2: CONTINUOUS TRAFFIC ENGINE (NiFi / RabbitMQ)
+             ============================================================ -->
+        <div id="paneContinuous" class="sim-tab-pane" style="display: none;">
+
+            <!-- ============================================================
+                 CONFIG SCREEN — form and Start button for continuous mode
+                 ============================================================ -->
+            <section id="configScreen" class="screen active">
+                <div class="config-wrap">
+
+                    <section class="card">
+
+                        <div class="card-header">
+                            <div>
+                                <h2>Simulator Configuration</h2>
+                                <p>Choose a source profile; the active cPlatform NiFi target is protected from accidental edits.</p>
+                            </div>
+                        </div>
+
+                        <div class="form-grid">
+
+                            <div class="form-group">
+                                <label for="profile">Source Profile</label>
+                                <select id="profile">
+                                    <option value="ftp">Real FTP source</option>
+                                    <option value="end_to_end_acceptance">Deterministic end-to-end acceptance (2 events)</option>
+                                </select>
+                                <span class="help-text">Acceptance mode still uses the live NiFi/RabbitMQ/database path.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="vendor">Vendor</label>
+                                <select id="vendor">
+                                    <option value="aviat">Aviat</option>
+                                    <option value="cambium">Cambium</option>
+                                </select>
+                                <span class="help-text">Determines the alarm format</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="rate">Send Rate</label>
+                                <div class="input-with-unit">
+                                    <input type="number" id="rate" value="1" min="0.1" max="100" step="0.1">
+                                    <span>alarms/sec</span>
+                                </div>
+                                <span class="help-text" id="rateHelp">Loading server limit…</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="runMode">Run Mode</label>
+                                <select id="runMode">
+                                    <option value="continuous">Continuous until stopped</option>
+                                    <option value="bounded">Bounded acceptance run</option>
+                                </select>
+                                <span class="help-text">Bounded runs stop after the event limit.</span>
+                            </div>
+
+                            <div class="form-group" id="eventLimitGroup" style="display:none">
+                                <label for="eventLimit">Event Limit</label>
+                                <input type="number" id="eventLimit" value="100" min="1" step="1">
+                                <span class="help-text">Useful for repeatable end-to-end verification.</span>
+                            </div>
+
+                            <div class="form-group full-width">
+                                <label>Managed Target</label>
+                                <div class="managed-target" id="managedTarget">Loading cPlatform target…</div>
+                            </div>
+
+                        </div>
+
+                        <div class="actions">
+                            <button
+                                type="button"
+                                id="startButton"
+                                class="btn btn-start"
+                                onclick="startSimulator()"
+                            >
+                                <span>&#9654;</span>
+                                Start Simulator
+                            </button>
+                        </div>
+
+                        <p id="configError" class="config-error"></p>
+                        {% if not can_control %}<p class="auth-note">You can inspect live status. <a href="/login/">Sign in as a simulator operator</a> to start or stop runs.</p>{% endif %}
+
+                    </section>
+
+                </div>
+            </section>
 
 
         <!-- ============================================================
@@ -304,6 +491,121 @@
             </div>
 
         </section>
+
+        </div> <!-- /paneContinuous -->
+
+
+        <!-- ============================================================
+             TAB PANE 3: PIPELINE ARCHITECTURE & SYSTEM HEALTH
+             ============================================================ -->
+        <div id="panePipeline" class="sim-tab-pane" style="display: none;">
+            <div class="config-wrap">
+
+                <section class="card" style="border-top: 3px solid var(--accent);">
+                    <div class="card-header">
+                        <div>
+                            <h2>🗺️ End-to-End Enterprise Pipeline Topology</h2>
+                            <p>Live architectural topology of the real-time telecom streaming and multi-agent incident response pipeline.</p>
+                        </div>
+                        <span class="sim-badge" style="background:color-mix(in oklab, var(--primary) 15%, transparent);color:var(--primary);font-family:var(--font-mono);font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid color-mix(in oklab, var(--primary) 30%, transparent)">
+                            Live Streaming Architecture
+                        </span>
+                    </div>
+
+                    <!-- Pipeline Architecture Flow Diagram -->
+                    <div class="pipeline-flow-diagram" style="background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+                            <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
+                                <div style="font-size:22px;margin-bottom:4px">📡</div>
+                                <strong style="font-size:12px;display:block">PulseFeed</strong>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 8001</span>
+                            </div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
+                                <div style="font-size:22px;margin-bottom:4px">🌊</div>
+                                <strong style="font-size:12px;display:block">Apache NiFi</strong>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9080</span>
+                            </div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
+                                <div style="font-size:22px;margin-bottom:4px">🐰</div>
+                                <strong style="font-size:12px;display:block">RabbitMQ</strong>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 5672</span>
+                            </div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
+                                <div style="font-size:22px;margin-bottom:4px">⚡</div>
+                                <strong style="font-size:12px;display:block">ClickHouse PM</strong>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 8123</span>
+                            </div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--primary);padding:14px;border-radius:var(--radius-md);box-shadow:var(--shadow-glow)">
+                                <div style="font-size:22px;margin-bottom:4px">🧠</div>
+                                <strong style="font-size:12px;display:block;color:var(--primary)">AgenticNOC</strong>
+                                <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 8000</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pipeline Nodes Detail Cards Grid -->
+                    <div class="pipeline-arch-grid">
+                        <div class="pipeline-node-card online">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <strong>Apache NiFi Ingress</strong>
+                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">LISTENING :9080</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">High-throughput ingestion processor receiving raw Aviat JSON alarm telemetry over HTTP.</p>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Endpoint: /aviat-alarms</div>
+                            <a href="http://localhost:9080/nifi" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open NiFi Console</a>
+                        </div>
+
+                        <div class="pipeline-node-card online">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <strong>RabbitMQ Message Broker</strong>
+                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">ACTIVE :5672</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">Guaranteed message queue routing telemetry across topics to streaming correlators.</p>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Topic: telemetry.alarms.aviat</div>
+                            <a href="http://localhost:15672" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open RabbitMQ Management</a>
+                        </div>
+
+                        <div class="pipeline-node-card online">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <strong>ClickHouse PM Store</strong>
+                                <span class="status-badge" style="background:#22c55e;color:#fff;font-size:10px;padding:2px 6px;border-radius:4px">PORT :8123</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">Ultra-fast columnar analytics store holding 15-minute PM waveform series (RSL, SNR, voltage, temp).</p>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Database: agentic_noc</div>
+                            <span style="font-size:11.5px;color:var(--muted-foreground)">March–April Real Baseline</span>
+                        </div>
+
+                        <div class="pipeline-node-card online">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <strong>AgenticNOC Multi-Agent Core</strong>
+                                <span class="status-badge" style="background:var(--primary);color:var(--primary-foreground);font-size:10px;padding:2px 6px;border-radius:4px">LANGGRAPH :8000</span>
+                            </div>
+                            <p style="font-size:12px;color:var(--muted-foreground);margin-bottom:10px">5-agent cognitive orchestrator with Triage, Supervisor, Diagnostics, and RCA specialists.</p>
+                            <div style="font-size:11px;font-family:var(--font-mono);color:var(--foreground);background:var(--secondary);padding:6px 8px;border-radius:4px;margin-bottom:8px">Model: Mistral / Gemini Local</div>
+                            <a href="http://localhost:8000" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--primary);text-decoration:none;font-weight:600">↗ Open AgenticNOC Dashboard</a>
+                        </div>
+                    </div>
+
+                    <!-- Video Presentation Talking Points Card -->
+                    <div style="margin-top:20px;padding:18px;background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-lg)">
+                        <h4 style="font-size:13px;color:var(--foreground);margin-bottom:8px">🎙️ Video Presentation Walkthrough Guide</h4>
+                        <div style="font-size:12px;color:var(--muted-foreground);line-height:1.6">
+                            <div><strong>1. Start at PulseFeed Simulator:</strong> Show the 10 real-world Aviat transmission fault scenarios and pick a scenario (e.g. Hardware Failure or Rain Fade).</div>
+                            <div><strong>2. Demonstrate Real-Time Ingress:</strong> Click "Inject Scenario Stream" and point out the live hop progression through Apache NiFi (9080) and RabbitMQ.</div>
+                            <div><strong>3. Showcase Autonomous Materialization:</strong> Transition into AgenticNOC via the 1-click button, where the streaming correlator materializes the incident in under 1 second.</div>
+                            <div><strong>4. Explore Cognitive Multi-Agent RCA:</strong> Walk through the 4 tabs: Telemetry Delta ➔ 10-Scenario Bayesian Spectrum ➔ 15-Minute ClickHouse Waveforms &amp; Hierarchical Topology Visualizer ➔ Automated Remediation Plan.</div>
+                            <div><strong>5. Command Center Drilldowns:</strong> Jump into the Topology Command Center and Indian Fleet Map for full operational oversight.</div>
+                        </div>
+                    </div>
+
+                </section>
+
+            </div>
+        </div>
 
     </main>
 
