@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>PulseFeed &mdash; Alarm Stream Simulator</title>
+    <title>Network Simulator &mdash; Transmission Fault Ingress &amp; Traffic Lab</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,8 +31,8 @@
                 </svg>
             </div>
             <div>
-                <h1>PulseFeed</h1>
-        <p>Server-managed cPlatform → NiFi → RabbitMQ alarm pipeline</p>
+                <h1>Network Simulator</h1>
+                <p>Deterministic Aviat Microwave Fault Ingress &amp; Pipeline Simulator</p>
             </div>
         </div>
 
@@ -47,17 +47,17 @@
         <div class="sim-nav-tabs">
             <button type="button" class="sim-nav-tab active" id="tabBtnScenarios" onclick="switchSimTab('scenarios')">
                 <span class="tab-icon">⚡</span>
-                <span class="tab-label">Transmission Scenarios</span>
+                <span class="tab-label">Scenario Run</span>
                 <span class="tab-badge">10 Scenarios · 20 Cases</span>
             </button>
             <button type="button" class="sim-nav-tab" id="tabBtnContinuous" onclick="switchSimTab('continuous')">
                 <span class="tab-icon">🌊</span>
-                <span class="tab-label">Continuous Traffic Engine</span>
+                <span class="tab-label">Load Run</span>
                 <span class="tab-badge" id="tabContinuousBadge">NiFi / RabbitMQ</span>
             </button>
             <button type="button" class="sim-nav-tab" id="tabBtnPipeline" onclick="switchSimTab('pipeline')">
                 <span class="tab-icon">🗺️</span>
-                <span class="tab-label">Pipeline Topology &amp; Health</span>
+                <span class="tab-label">Monitoring pipeline</span>
                 <span class="tab-badge">Live Endpoints</span>
             </button>
         </div>
@@ -86,16 +86,20 @@
                         <div class="form-group">
                             <label for="scenarioSelect">Transmission Fault Scenario</label>
                             <select id="scenarioSelect" onchange="onScenarioSelectChange()">
-                                <option value="rain_fade">🌧️ Rain Fade (Atmospheric RF Attenuation)</option>
-                                <option value="antenna_drift">📡 Antenna Drift (Mechanical Misalignment)</option>
-                                <option value="hardware_failure">🔌 Hardware / Transceiver Failure</option>
-                                <option value="site_power_failure">⚡ Site Power Failure (DC Plant Outage)</option>
-                                <option value="protection_switch">🛡️ 1+1 HSB Protection Switch Failover</option>
-                                <option value="capacity_congestion">📊 Capacity Congestion &amp; ACM Fallback</option>
-                                <option value="flapping_link">🔄 Intermittent Flapping Link</option>
-                                <option value="node_isolation">🌐 Hub / Node Reachability Isolation</option>
-                                <option value="config_drift">⚙️ Parameter &amp; Frequency Config Drift</option>
-                                <option value="environmental_alarm">🌡️ Shelter / Cabinet Thermal Overheat</option>
+                                <optgroup label="⭐ Showcase Scenarios (Presenter Certified)">
+                                    <option value="site_power_failure" selected>⚡ 1. Cascading Alarms: Site Power Outage (Correlation ➔ Field Dispatch)</option>
+                                    <option value="config_drift">⚙️ 2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)</option>
+                                    <option value="rain_fade">🌧️ 3A. Rain Fade (Debate &amp; Physics Engine ➔ Auto-Resolve)</option>
+                                    <option value="antenna_drift">📡 3B. Antenna Drift (Debate &amp; Physics Engine ➔ Field Dispatch)</option>
+                                </optgroup>
+                                <optgroup label="🌐 Additional Microwave Transmission Scenarios">
+                                    <option value="hardware_failure">🔌 Hardware / Transceiver Failure</option>
+                                    <option value="protection_switch">🛡️ 1+1 HSB Protection Switch Failover</option>
+                                    <option value="capacity_congestion">📊 Capacity Congestion &amp; ACM Fallback</option>
+                                    <option value="flapping_link">🔄 Intermittent Flapping Link</option>
+                                    <option value="node_isolation">🌐 Hub / Node Reachability Isolation</option>
+                                    <option value="environmental_alarm">🌡️ Shelter / Cabinet Thermal Overheat</option>
+                                </optgroup>
                             </select>
                             <span class="help-text">Observed Aviat 15-min baseline + bounded case transformation</span>
                         </div>
@@ -517,7 +521,7 @@
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
                                 <div style="font-size:22px;margin-bottom:4px">📡</div>
-                                <strong style="font-size:12px;display:block">PulseFeed</strong>
+                                <strong style="font-size:12px;display:block">Network Simulator</strong>
                                 <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9019</span>
                             </div>
                             <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
@@ -594,11 +598,11 @@
                     <div style="margin-top:20px;padding:18px;background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-lg)">
                         <h4 style="font-size:13px;color:var(--foreground);margin-bottom:8px">🎙️ Video Presentation Walkthrough Guide</h4>
                         <div style="font-size:12px;color:var(--muted-foreground);line-height:1.6">
-                            <div><strong>1. Start at PulseFeed Simulator:</strong> Show the 10 real-world Aviat transmission fault scenarios and pick a scenario (e.g. Hardware Failure or Rain Fade).</div>
+                            <div><strong>1. Start at Network Simulator:</strong> Show the 10 real-world Aviat transmission fault scenarios and pick a scenario (e.g. Cascading Alarms, Config Mismatch, or Rain Fade vs Antenna Drift).</div>
                             <div><strong>2. Demonstrate Real-Time Ingress:</strong> Click "Inject Scenario Stream" and point out the live hop progression through Apache NiFi (9080) and RabbitMQ.</div>
                             <div><strong>3. Showcase Autonomous Materialization:</strong> Transition into AgenticNOC via the 1-click button, where the streaming correlator materializes the incident in under 1 second.</div>
                             <div><strong>4. Explore Cognitive Multi-Agent RCA:</strong> Walk through the 4 tabs: Telemetry Delta ➔ 10-Scenario Bayesian Spectrum ➔ 15-Minute ClickHouse Waveforms &amp; Hierarchical Topology Visualizer ➔ Automated Remediation Plan.</div>
-                            <div><strong>5. Command Center Drilldowns:</strong> Jump into the Topology Command Center and Indian Fleet Map for full operational oversight.</div>
+                            <div><strong>5. Command Center Drilldowns:</strong> Jump into the Topology Command Center and Field Dispatch board for full operational oversight.</div>
                         </div>
                     </div>
 
@@ -610,7 +614,7 @@
     </main>
 
     <footer class="footer">
-        PulseFeed &mdash; Alarm Stream Simulator
+        Network Simulator &mdash; Transmission Fault Ingress &amp; Traffic Lab
     </footer>
 
 </div>
