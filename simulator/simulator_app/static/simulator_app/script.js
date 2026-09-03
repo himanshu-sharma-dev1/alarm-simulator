@@ -600,14 +600,14 @@ async function loadScenarioPreflight() {
         summary.textContent = ready
             ? "Selected case and required stream dependencies are ready."
             : (data.error || "Selected case is not ready for a live ingress run.");
-        summary.style.color = ready ? "#166534" : "#9a3412";
+        summary.style.color = ready ? "#4ade80" : "#fb923c";
         if (badge) {
             badge.textContent = ready ? "READY" : "BLOCKED";
-            badge.style.background = ready ? "#22c55e" : "#ea580c";
+            badge.style.background = ready ? "#16a34a" : "#ea580c";
         }
         if (card) {
-            card.style.background = ready ? "#f0fdf4" : "#fff7ed";
-            card.style.borderColor = ready ? "#bbf7d0" : "#fed7aa";
+            card.style.background = ready ? "rgba(34, 197, 94, 0.08)" : "rgba(234, 88, 12, 0.08)";
+            card.style.borderColor = ready ? "rgba(34, 197, 94, 0.25)" : "rgba(234, 88, 12, 0.25)";
         }
         if (checksEl) {
             const checks = Array.isArray(data.checks) ? data.checks : [];
@@ -623,14 +623,14 @@ async function loadScenarioPreflight() {
         if (requestId !== scenarioPreflightRequest || requestedScenario !== scenarioSelect.value || requestedCase !== (caseSelect.value || "1")) return;
         scenarioPreflight = { ready: false, error: "Preflight service unavailable" };
         summary.textContent = "Preflight service unavailable; scenario injection is paused.";
-        summary.style.color = "#9a3412";
+        summary.style.color = "#fb923c";
         if (badge) {
             badge.textContent = "UNAVAILABLE";
             badge.style.background = "#64748b";
         }
         if (card) {
-            card.style.background = "#f8fafc";
-            card.style.borderColor = "#cbd5e1";
+            card.style.background = "rgba(100, 116, 139, 0.08)";
+            card.style.borderColor = "rgba(100, 116, 139, 0.25)";
         }
         if (checksEl) checksEl.textContent = String(err && err.message || "preflight request failed");
         if (injectButton) injectButton.disabled = true;
@@ -871,6 +871,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
 let scenarioPollTimer = null;
 
+function setPipeNode(id, state, metaText) {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.classList.remove("active", "done", "error");
+    if (state) node.classList.add(state);
+    if (metaText) {
+        const meta = document.getElementById("meta" + id.replace("node", ""));
+        if (meta) meta.textContent = metaText;
+    }
+}
+
+function setPipePulse(id, isFlowing) {
+    const pulse = document.getElementById(id);
+    if (pulse) pulse.classList.toggle("flowing", isFlowing);
+}
+
 async function injectScenarioStream() {
     const scenario = document.getElementById("scenarioSelect").value;
     const caseNumber = parseInt(document.getElementById("caseVariantSelect").value, 10) || 1;
@@ -883,11 +899,25 @@ async function injectScenarioStream() {
     statusText.textContent = "Starting validated scenario stream...";
     tracker.style.display = "block";
 
-    // Reset steps
-    setStepActive("stepSim", true, "1. Simulator Dispatched");
-    setStepActive("stepNifi", false, "2. NiFi Ingress (9080)");
-    setStepActive("stepRabbit", false, "3. RabbitMQ Ingested");
-    setStepActive("stepNoc", false, "4. AgenticNOC Materialized");
+    // Reset 5-node dynamic track
+    setPipeNode("nodeSim", "done", ":9019 · Dispatched ✓");
+    setPipeNode("nodeNifi", "active", ":9080 · Ingress stream");
+    setPipeNode("nodeRabbit", "", ":15674 · Stream queue");
+    setPipeNode("nodeCh", "", ":9017 · PM store");
+    setPipeNode("nodeNoc", "", ":9015 · Multi-Agent idle");
+    setPipePulse("pulseSimNifi", true);
+    setPipePulse("pulseNifiRabbit", false);
+    setPipePulse("pulseRabbitCh", false);
+    setPipePulse("pulseChNoc", false);
+
+    const hopTimer = document.getElementById("hopTimerBadge");
+    if (hopTimer) hopTimer.textContent = "T+ 0.0s";
+
+    const progStaged = document.getElementById("phaseStepStaged");
+    if (progStaged) { progStaged.style.borderTopColor = "#22c55e"; progStaged.style.color = "#22c55e"; }
+    const progStreaming = document.getElementById("phaseStepStreaming");
+    if (progStreaming) { progStreaming.style.borderTopColor = "#38bdf8"; progStreaming.style.color = "#38bdf8"; progStreaming.textContent = "● Stream Ingress Flowing"; }
+
     detail.innerHTML = `<em>Initializing ${escapeHtml(scenario)} (Case ${escapeHtml(caseNumber)})...</em>`;
 
     try {
@@ -904,11 +934,14 @@ async function injectScenarioStream() {
         if (!data.ok) {
             statusText.textContent = `❌ ${data.message || "Failed to inject scenario"}`;
             btn.disabled = false;
+            setPipeNode("nodeSim", "error", ":9019 · Rejected");
             return;
         }
 
         statusText.textContent = `✅ Ingress stream active · Run #${data.demo_id || "—"}`;
-        setStepActive("stepNifi", false, "2. NiFi delivery pending");
+        setPipeNode("nodeNifi", "active", ":9080 · Receiving packets");
+        setPipePulse("pulseNifiRabbit", true);
+
         detail.innerHTML = `<strong>Ingress Cycle:</strong> <code>${escapeHtml(data.replay_cycle_id)}</code> | <strong>Stream Session:</strong> <code>${escapeHtml(data.simulator_run_id)}</code>`;
 
         const scenInfo = SCENARIO_DETAILS[scenario] || {};
@@ -932,6 +965,7 @@ async function injectScenarioStream() {
     } catch (err) {
         statusText.textContent = `❌ Error: ${err}`;
         btn.disabled = false;
+        setPipeNode("nodeSim", "error", ":9019 · Error");
     }
 }
 
@@ -955,29 +989,20 @@ function pollScenarioPipeline(demoId, agenticUrl) {
     const btn = document.getElementById("injectScenarioBtn");
     const detail = document.getElementById("journeyDetail");
     const statusText = document.getElementById("scenarioInjectStatus");
+    const hopTimer = document.getElementById("hopTimerBadge");
 
     let attempts = 0;
     scenarioPollTimer = setInterval(async () => {
         attempts++;
-        if (attempts > 30) {
+        if (hopTimer) hopTimer.textContent = `T+ ${(attempts * 0.8).toFixed(1)}s`;
+
+        if (attempts > 35) {
             clearInterval(scenarioPollTimer);
             btn.disabled = false;
-            statusText.textContent = "⏳ Scenario accepted · pipeline still pending";
-            setStepActive("stepNifi", false, "2. NiFi delivery not yet observed");
-            const pendingRabbit = document.getElementById("stepRabbit");
-            if (pendingRabbit) {
-                pendingRabbit.style.background = "#fff7ed";
-                pendingRabbit.style.color = "#c2410c";
-                pendingRabbit.style.fontWeight = "600";
-                pendingRabbit.textContent = "↻ 3. RabbitMQ/correlator still pending";
-            }
-            const pendingNoc = document.getElementById("stepNoc");
-            if (pendingNoc) {
-                pendingNoc.style.background = "#fff7ed";
-                pendingNoc.style.color = "#c2410c";
-                pendingNoc.style.fontWeight = "600";
-                pendingNoc.textContent = "↻ 4. AgenticNOC incident not observed";
-            }
+            statusText.textContent = "⏳ Ingress accepted · pipeline processing in background";
+            setPipeNode("nodeNoc", "active", ":9015 · Background queue");
+            return;
+        }
             const investigating = document.getElementById("phaseStepInvestigating");
             if (investigating) {
                 investigating.style.borderTopColor = "#f59e0b";
@@ -1018,23 +1043,41 @@ function pollScenarioPipeline(demoId, agenticUrl) {
             const nifiProof = proofStatus("nifi");
             const rabbitProof = proofStatus("rabbitmq");
             const materializerProof = proofStatus("incident_materializer");
-            if (simulatorProof) setStepActive("stepSim", simulatorProof.status === "accepted", "1. Simulator accepted");
-            setStepActive("stepNifi", Boolean(nifiProof && nifiProof.status === "delivered"), nifiProof ? "✓ 2. NiFi delivery confirmed" : "2. NiFi delivery pending");
-            setStepActive("stepRabbit", Boolean(rabbitProof && rabbitProof.status === "consumed"), rabbitProof ? "✓ 3. RabbitMQ/correlator confirmed" : "3. RabbitMQ/correlator pending");
+            if (simulatorProof) setPipeNode("nodeSim", "done", ":9019 · Dispatched ✓");
+            if (nifiProof && nifiProof.status === "delivered") {
+                setPipeNode("nodeNifi", "done", ":9080 · Delivered ✓");
+                setPipeNode("nodeRabbit", "active", ":15674 · Ingesting");
+                setPipePulse("pulseNifiRabbit", true);
+                const pStreaming = document.getElementById("phaseStepStreaming");
+                if (pStreaming) { pStreaming.style.borderTopColor = "#22c55e"; pStreaming.style.color = "#22c55e"; pStreaming.textContent = "✓ NiFi → RabbitMQ"; }
+            }
+            if (rabbitProof && rabbitProof.status === "consumed") {
+                setPipeNode("nodeRabbit", "done", ":15674 · Stream queue ✓");
+                setPipeNode("nodeCh", "active", ":9017 · PM Telemetry");
+                setPipePulse("pulseRabbitCh", true);
+            }
 
             if (inc && inc.id) {
                 const incidentNode = typeof inc.primary_node === "object" && inc.primary_node
                     ? (inc.primary_node.node_id || inc.primary_node.id || "not recorded")
                     : (inc.primary_node || inc.node_id || "not recorded");
                 const incidentSeverity = inc.root_severity || inc.severity || "not recorded";
-                setStepActive("stepNoc", Boolean(materializerProof || inc.id), "✓ 4. Incident materialized");
+                setPipeNode("nodeCh", "done", ":9017 · PM Series Sealed ✓");
+                setPipeNode("nodeNoc", "done", ":9015 · Multi-Agent Active ✓");
+                setPipePulse("pulseChNoc", true);
                 statusText.textContent = `✅ Incident ${inc.reference_code || `#${inc.id}`} materialized`;
 
                 const matEl = document.getElementById("phaseStepMaterialized");
                 if (matEl) {
                     matEl.style.borderTopColor = "#22c55e";
-                    matEl.style.color = "#15803d";
+                    matEl.style.color = "#22c55e";
                     matEl.textContent = "✓ Incident materialized";
+                }
+                const invEl = document.getElementById("phaseStepInvestigating");
+                if (invEl) {
+                    invEl.style.borderTopColor = "#38bdf8";
+                    invEl.style.color = "#38bdf8";
+                    invEl.textContent = "● LangGraph Investigation";
                 }
                 const streamEl = document.getElementById("phaseStepStreaming");
                 if (streamEl) {

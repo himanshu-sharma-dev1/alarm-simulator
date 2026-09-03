@@ -46,17 +46,14 @@
     <nav class="sim-nav-bar">
         <div class="sim-nav-tabs">
             <button type="button" class="sim-nav-tab active" id="tabBtnScenarios" onclick="switchSimTab('scenarios')">
-                <span class="tab-icon">⚡</span>
                 <span class="tab-label">Scenario Run</span>
                 <span class="tab-badge">10 Scenarios · 20 Cases</span>
             </button>
             <button type="button" class="sim-nav-tab" id="tabBtnContinuous" onclick="switchSimTab('continuous')">
-                <span class="tab-icon">🌊</span>
                 <span class="tab-label">Load Run</span>
                 <span class="tab-badge" id="tabContinuousBadge">NiFi / RabbitMQ</span>
             </button>
             <button type="button" class="sim-nav-tab" id="tabBtnPipeline" onclick="switchSimTab('pipeline')">
-                <span class="tab-icon">📡</span>
                 <span class="tab-label">Monitoring Pipeline</span>
                 <span class="tab-badge">Live Endpoints</span>
             </button>
@@ -182,36 +179,64 @@
                         <span id="scenarioInjectStatus" style="font-size: 13px; font-family: var(--font-mono); color: var(--muted-foreground);"></span>
                     </div>
 
-                    <!-- Pipeline Ingress Hop Tracker & Lifecycle Milestones -->
+                    <!-- Pipeline Ingress Dynamic Hop Visualizer & Lifecycle Milestones -->
                     <div id="pipelineJourneyTracker" class="hop-tracker-container" style="display: none;">
-                        <div style="font-size: 13px; font-weight: 600; color: var(--foreground); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>⚡</span> Live Stream Ingress &amp; Lifecycle Journey
+                        <div style="font-size: 13px; font-weight: 600; color: var(--foreground); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="display: flex; align-items: center; gap: 8px;">
+                                <span class="hop-pulse-dot"></span> Live Pipeline Packet Ingress &amp; Multi-Agent Workflow
+                            </span>
+                            <span id="hopTimerBadge" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); background: color-mix(in oklab, var(--accent) 15%, transparent); padding: 2px 8px; border-radius: 4px;">T+ 0.0s</span>
                         </div>
 
                         <!-- Phase Progression Line -->
-                        <div id="phaseProgressionBar" style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 12px;">
-                            <div style="flex: 1; min-width: 110px; border-top: 3px solid #22c55e; padding-top: 4px; font-size: 10.5px; color: #22c55e;">✓ Ingress stream batch staged</div>
-                            <div id="phaseStepStreaming" style="flex: 1; min-width: 120px; border-top: 3px solid var(--accent); padding-top: 4px; font-size: 10.5px; color: var(--accent);">● Simulator → NiFi → RabbitMQ</div>
+                        <div id="phaseProgressionBar" style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 14px;">
+                            <div id="phaseStepStaged" style="flex: 1; min-width: 110px; border-top: 3px solid #22c55e; padding-top: 4px; font-size: 10.5px; color: #22c55e;">✓ Ingress stream batch staged</div>
+                            <div id="phaseStepStreaming" style="flex: 1; min-width: 120px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ Simulator → NiFi → RabbitMQ</div>
                             <div id="phaseStepMaterialized" style="flex: 1; min-width: 120px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ Incident materialized</div>
                             <div id="phaseStepInvestigating" style="flex: 1; min-width: 140px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ LangGraph investigation</div>
                             <div id="phaseStepCompleted" style="flex: 1; min-width: 110px; border-top: 3px solid var(--border); padding-top: 4px; font-size: 10.5px; color: var(--muted-foreground);">○ RCA complete</div>
                         </div>
 
-                        <div class="hop-steps-flow">
-                            <div id="stepSim" class="hop-step-pill active">
-                                <span>1. Simulator Dispatched</span>
+                        <!-- 5-Node Animated Pipeline Track -->
+                        <div class="dynamic-pipeline-track">
+                            <div id="nodeSim" class="pipe-node active">
+                                <div class="pipe-node-icon">1</div>
+                                <div class="pipe-node-body">
+                                    <div class="pipe-node-name">Simulator</div>
+                                    <div class="pipe-node-meta" id="metaSim">:9019 · Dispatched</div>
+                                </div>
                             </div>
-                            <span class="hop-step-arrow">➔</span>
-                            <div id="stepNifi" class="hop-step-pill">
-                                <span>2. NiFi Ingress (9080)</span>
+                            <div class="pipe-track-segment"><div id="pulseSimNifi" class="pipe-pulse"></div></div>
+                            <div id="nodeNifi" class="pipe-node">
+                                <div class="pipe-node-icon">2</div>
+                                <div class="pipe-node-body">
+                                    <div class="pipe-node-name">Apache NiFi</div>
+                                    <div class="pipe-node-meta" id="metaNifi">:9080 · Ingress</div>
+                                </div>
                             </div>
-                            <span class="hop-step-arrow">➔</span>
-                            <div id="stepRabbit" class="hop-step-pill">
-                                <span>3. RabbitMQ Ingested</span>
+                            <div class="pipe-track-segment"><div id="pulseNifiRabbit" class="pipe-pulse"></div></div>
+                            <div id="nodeRabbit" class="pipe-node">
+                                <div class="pipe-node-icon">3</div>
+                                <div class="pipe-node-body">
+                                    <div class="pipe-node-name">RabbitMQ</div>
+                                    <div class="pipe-node-meta" id="metaRabbit">:15674 · Stream Queue</div>
+                                </div>
                             </div>
-                            <span class="hop-step-arrow">➔</span>
-                            <div id="stepNoc" class="hop-step-pill">
-                                <span>4. AgenticNOC Materialized</span>
+                            <div class="pipe-track-segment"><div id="pulseRabbitCh" class="pipe-pulse"></div></div>
+                            <div id="nodeCh" class="pipe-node">
+                                <div class="pipe-node-icon">4</div>
+                                <div class="pipe-node-body">
+                                    <div class="pipe-node-name">ClickHouse</div>
+                                    <div class="pipe-node-meta" id="metaCh">:9017 · PM Series</div>
+                                </div>
+                            </div>
+                            <div class="pipe-track-segment"><div id="pulseChNoc" class="pipe-pulse"></div></div>
+                            <div id="nodeNoc" class="pipe-node">
+                                <div class="pipe-node-icon">5</div>
+                                <div class="pipe-node-body">
+                                    <div class="pipe-node-name">AgenticNOC</div>
+                                    <div class="pipe-node-meta" id="metaNoc">:9015 · Multi-Agent</div>
+                                </div>
                             </div>
                         </div>
 

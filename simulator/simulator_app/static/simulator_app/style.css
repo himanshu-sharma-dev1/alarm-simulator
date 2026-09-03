@@ -731,6 +731,111 @@ body {
     margin-top: 14px;
 }
 
+/* Dynamic Pipeline Visualizer */
+.hop-pulse-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 8px #22c55e;
+    animation: pulseGlow 1.5s infinite;
+}
+@keyframes pulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+}
+.dynamic-pipeline-track {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: color-mix(in oklab, var(--card) 90%, black);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    gap: 6px;
+    overflow-x: auto;
+}
+.pipe-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: color-mix(in oklab, var(--secondary) 60%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+.pipe-node.active {
+    background: color-mix(in oklab, #38bdf8 15%, transparent);
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px color-mix(in oklab, #38bdf8 25%, transparent);
+}
+.pipe-node.done {
+    background: color-mix(in oklab, #22c55e 15%, transparent);
+    border-color: #22c55e;
+}
+.pipe-node.error {
+    background: color-mix(in oklab, #ef4444 15%, transparent);
+    border-color: #ef4444;
+}
+.pipe-node-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--muted-foreground);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+.pipe-node.active .pipe-node-icon {
+    background: #38bdf8;
+    color: #0f172a;
+}
+.pipe-node.done .pipe-node-icon {
+    background: #22c55e;
+    color: #0f172a;
+}
+.pipe-node-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--foreground);
+}
+.pipe-node-meta {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--muted-foreground);
+}
+.pipe-track-segment {
+    flex: 1;
+    height: 3px;
+    min-width: 14px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+}
+.pipe-pulse {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, #38bdf8, #22c55e, transparent);
+    opacity: 0;
+}
+.pipe-pulse.flowing {
+    opacity: 1;
+    animation: flowPulse 1.2s infinite linear;
+}
+@keyframes flowPulse {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
 .hop-step-pill {
     padding: 8px 14px;
     border-radius: var(--radius-md);
