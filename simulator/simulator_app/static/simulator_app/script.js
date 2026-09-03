@@ -982,25 +982,33 @@ function pollScenarioPipeline(demoId, agenticUrl) {
 
                 let resolvedUrl = data.agentic_url || agenticUrl || "http://iktaratech.com:9015/#incidents";
                 if (resolvedUrl.startsWith("/")) {
-                    resolvedUrl = "http://iktaratech.com:9015" + resolvedUrl;
+                    resolvedUrl = window.location.protocol + "//" + window.location.hostname + ":9015" + resolvedUrl;
+                } else {
+                    try {
+                        const parsed = new URL(resolvedUrl);
+                        if (window.location.hostname && !window.location.hostname.includes("iktaratech.com")) {
+                            parsed.hostname = window.location.hostname;
+                            resolvedUrl = parsed.toString();
+                        }
+                    } catch (_) {}
                 }
 
                 detail.innerHTML = `
                     <div class="incident-ready-banner">
                         <div>
                             <div style="font-weight:700;font-size:14px;color:#15803d;display:flex;align-items:center;gap:6px">
-                                <span>🎉</span> Stream Materialized in AgenticNOC
+                                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a"></span> Telemetry Correlated in AgenticNOC
                             </div>
                             <div style="font-family:var(--font-mono);font-size:12px;color:#166534;margin-top:4px">
                                 Incident: <strong>${escapeHtml(inc.reference_code || `#${inc.id}`)}</strong> &bull; Severity: <strong>${escapeHtml(incidentSeverity)}</strong> &bull; Node: <strong>${escapeHtml(incidentNode)}</strong>
                             </div>
                             <div style="font-size:11px;color:#15803d;margin-top:2px">
-                                Autonomous 5-agent LangGraph workflow initiated · ClickHouse PM evidence sealed
+                                Multi-agent LangGraph workflow initiated · ClickHouse PM evidence sealed
                             </div>
                         </div>
                         <div>
                             <a href="${escapeHtml(resolvedUrl)}" target="_blank" rel="noopener" class="btn-open-agentic">
-                                👉 Open Incident in AgenticNOC ➔
+                                Open Incident in AgenticNOC &rarr;
                             </a>
                         </div>
                     </div>

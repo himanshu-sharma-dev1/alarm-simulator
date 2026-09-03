@@ -46,18 +46,15 @@
     <nav class="sim-nav-bar">
         <div class="sim-nav-tabs">
             <button type="button" class="sim-nav-tab active" id="tabBtnScenarios" onclick="switchSimTab('scenarios')">
-                <span class="tab-icon">⚡</span>
                 <span class="tab-label">Scenario Run</span>
                 <span class="tab-badge">10 Scenarios · 20 Cases</span>
             </button>
             <button type="button" class="sim-nav-tab" id="tabBtnContinuous" onclick="switchSimTab('continuous')">
-                <span class="tab-icon">🌊</span>
                 <span class="tab-label">Load Run</span>
                 <span class="tab-badge" id="tabContinuousBadge">NiFi / RabbitMQ</span>
             </button>
             <button type="button" class="sim-nav-tab" id="tabBtnPipeline" onclick="switchSimTab('pipeline')">
-                <span class="tab-icon">🗺️</span>
-                <span class="tab-label">Monitoring pipeline</span>
+                <span class="tab-label">Monitoring Pipeline</span>
                 <span class="tab-badge">Live Endpoints</span>
             </button>
         </div>
@@ -74,7 +71,7 @@
                 <section class="card" style="border-top: 3px solid var(--primary);">
                     <div class="card-header">
                         <div>
-                            <h2>⚡ Transmission Scenario Ingress &amp; Pipeline Injection</h2>
+                            <h2>Transmission Scenario Ingress &amp; Pipeline Injection</h2>
                             <p>Inject real-world Aviat baseline microwave transmission faults directly into Apache NiFi (Port 9080) &rarr; RabbitMQ &rarr; AgenticNOC.</p>
                         </div>
                         <span class="sim-badge" style="background:color-mix(in oklab, var(--primary) 15%, transparent);color:var(--primary);font-family:var(--font-mono);font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid color-mix(in oklab, var(--primary) 30%, transparent)">
@@ -86,19 +83,19 @@
                         <div class="form-group">
                             <label for="scenarioSelect">Transmission Fault Scenario</label>
                             <select id="scenarioSelect" onchange="onScenarioSelectChange()">
-                                <optgroup label="⭐ Showcase Scenarios (Presenter Certified)">
-                                    <option value="site_power_failure" selected>⚡ 1. Cascading Alarms: Site Power Outage (Correlation ➔ Field Dispatch)</option>
-                                    <option value="config_drift">⚙️ 2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)</option>
-                                    <option value="rain_fade">🌧️ 3A. Rain Fade (Debate &amp; Physics Engine ➔ Auto-Resolve)</option>
-                                    <option value="antenna_drift">📡 3B. Antenna Drift (Debate &amp; Physics Engine ➔ Field Dispatch)</option>
+                                <optgroup label="Showcase Scenarios (Presenter Certified)">
+                                    <option value="site_power_failure" selected>1. Cascading Alarms: Site Power Outage (Correlation &rarr; Field Dispatch)</option>
+                                    <option value="config_drift">2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)</option>
+                                    <option value="rain_fade">3A. Rain Fade (Debate &amp; Physics Engine &rarr; Auto-Resolve)</option>
+                                    <option value="antenna_drift">3B. Antenna Drift (Debate &amp; Physics Engine &rarr; Field Dispatch)</option>
                                 </optgroup>
-                                <optgroup label="🌐 Additional Microwave Transmission Scenarios">
-                                    <option value="hardware_failure">🔌 Hardware / Transceiver Failure</option>
-                                    <option value="protection_switch">🛡️ 1+1 HSB Protection Switch Failover</option>
-                                    <option value="capacity_congestion">📊 Capacity Congestion &amp; ACM Fallback</option>
-                                    <option value="flapping_link">🔄 Intermittent Flapping Link</option>
-                                    <option value="node_isolation">🌐 Hub / Node Reachability Isolation</option>
-                                    <option value="environmental_alarm">🌡️ Shelter / Cabinet Thermal Overheat</option>
+                                <optgroup label="Additional Microwave Transmission Scenarios">
+                                    <option value="hardware_failure">Hardware / Transceiver Failure</option>
+                                    <option value="protection_switch">1+1 HSB Protection Switch Failover</option>
+                                    <option value="capacity_congestion">Capacity Congestion &amp; ACM Fallback</option>
+                                    <option value="flapping_link">Intermittent Flapping Link</option>
+                                    <option value="node_isolation">Hub / Node Reachability Isolation</option>
+                                    <option value="environmental_alarm">Shelter / Cabinet Thermal Overheat</option>
                                 </optgroup>
                             </select>
                             <span class="help-text">Observed Aviat 15-min baseline + bounded case transformation</span>
@@ -176,7 +173,7 @@
                             onclick="injectScenarioStream()"
                             style="background: var(--primary); color: var(--primary-foreground);"
                         >
-                            <span>⚡</span>
+                            <span>&rarr;</span>
                             Inject Scenario Stream
                         </button>
                         <span id="scenarioInjectStatus" style="font-size: 13px; font-family: var(--font-mono); color: var(--muted-foreground);"></span>
@@ -185,7 +182,7 @@
                     <!-- Pipeline Ingress Hop Tracker & Lifecycle Milestones -->
                     <div id="pipelineJourneyTracker" class="hop-tracker-container" style="display: none;">
                         <div style="font-size: 13px; font-weight: 600; color: var(--foreground); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                            <span>🚀</span> Live Stream Ingress &amp; Lifecycle Journey
+                            <span>&bull;</span> Live Stream Ingress &amp; Lifecycle Journey
                         </div>
 
                         <!-- Phase Progression Line -->
@@ -520,31 +517,31 @@
                     <div class="pipeline-flow-diagram" style="background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:20px">
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
-                                <div style="font-size:22px;margin-bottom:4px">📡</div>
+                                <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;color:var(--primary);margin-bottom:4px;font-family:var(--font-mono)">INGRESS</div>
                                 <strong style="font-size:12px;display:block">Network Simulator</strong>
                                 <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9019</span>
                             </div>
-                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">&rarr;</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
-                                <div style="font-size:22px;margin-bottom:4px">🌊</div>
+                                <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;color:var(--primary);margin-bottom:4px;font-family:var(--font-mono)">STREAM</div>
                                 <strong style="font-size:12px;display:block">Apache NiFi</strong>
                                 <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9001</span>
                             </div>
-                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">&rarr;</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
-                                <div style="font-size:22px;margin-bottom:4px">🐰</div>
+                                <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;color:var(--primary);margin-bottom:4px;font-family:var(--font-mono)">BROKER</div>
                                 <strong style="font-size:12px;display:block">RabbitMQ</strong>
                                 <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 15674</span>
                             </div>
-                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">&rarr;</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:var(--radius-md)">
-                                <div style="font-size:22px;margin-bottom:4px">⚡</div>
+                                <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;color:var(--primary);margin-bottom:4px;font-family:var(--font-mono)">METRICS</div>
                                 <strong style="font-size:12px;display:block">ClickHouse PM</strong>
                                 <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9017</span>
                             </div>
-                            <div style="color:var(--primary);font-weight:700;font-size:18px">➔</div>
+                            <div style="color:var(--primary);font-weight:700;font-size:18px">&rarr;</div>
                             <div style="text-align:center;min-width:130px;background:var(--card);border:1px solid var(--primary);padding:14px;border-radius:var(--radius-md);box-shadow:var(--shadow-glow)">
-                                <div style="font-size:22px;margin-bottom:4px">🧠</div>
+                                <div style="font-size:10px;font-weight:700;letter-spacing:0.5px;color:var(--primary);margin-bottom:4px;font-family:var(--font-mono)">AGENTS</div>
                                 <strong style="font-size:12px;display:block;color:var(--primary)">AgenticNOC</strong>
                                 <span style="font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)">Port 9015</span>
                             </div>
