@@ -71,7 +71,7 @@
                 <section class="card" style="border-top: 3px solid var(--primary);">
                     <div class="card-header">
                         <div>
-                            <h2>⚡ Transmission Scenario Ingress &amp; Pipeline Injection</h2>
+                            <h2>Transmission Scenario Ingress &amp; Pipeline Injection</h2>
                             <p>Inject real-world Aviat baseline microwave transmission faults directly into Apache NiFi (Port 9080) &rarr; RabbitMQ &rarr; AgenticNOC.</p>
                         </div>
                         <span class="sim-badge" style="background:color-mix(in oklab, var(--primary) 15%, transparent);color:var(--primary);font-family:var(--font-mono);font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid color-mix(in oklab, var(--primary) 30%, transparent)">
@@ -84,18 +84,18 @@
                             <label for="scenarioSelect">Transmission Fault Scenario</label>
                             <select id="scenarioSelect" onchange="onScenarioSelectChange()">
                                 <optgroup label="Showcase Scenarios (Presenter Certified)">
-                                    <option value="site_power_failure" selected>⚡ 1. Cascading Alarms: Site Power Outage (Correlation &rarr; Field Dispatch)</option>
-                                    <option value="config_drift">⚙️ 2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)</option>
-                                    <option value="rain_fade">🌧️ 3A. Rain Fade (Debate &amp; Physics Engine &rarr; Auto-Resolve)</option>
-                                    <option value="antenna_drift">📡 3B. Antenna Drift (Debate &amp; Physics Engine &rarr; Field Dispatch)</option>
+                                    <option value="site_power_failure" selected>1. Cascading Alarms: Site Power Outage (Correlation &rarr; Field Dispatch)</option>
+                                    <option value="config_drift">2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)</option>
+                                    <option value="rain_fade">3A. Rain Fade (Debate &amp; Physics Engine &rarr; Auto-Resolve)</option>
+                                    <option value="antenna_drift">3B. Antenna Drift (Debate &amp; Physics Engine &rarr; Field Dispatch)</option>
                                 </optgroup>
                                 <optgroup label="Additional Microwave Transmission Scenarios (Full 10-Scenario Suite)">
-                                    <option value="hardware_failure">🔌 Hardware / Transceiver Failure</option>
-                                    <option value="protection_switch">🛡️ 1+1 HSB Protection Switch Failover</option>
-                                    <option value="capacity_congestion">📊 Capacity Congestion &amp; ACM Fallback</option>
-                                    <option value="flapping_link">🔄 Intermittent Flapping Link</option>
-                                    <option value="node_isolation">🌐 Hub / Node Reachability Isolation</option>
-                                    <option value="environmental_alarm">🌡️ Shelter / Cabinet Thermal Overheat</option>
+                                    <option value="hardware_failure">Hardware / Transceiver Failure</option>
+                                    <option value="protection_switch">1+1 HSB Protection Switch Failover</option>
+                                    <option value="capacity_congestion">Capacity Congestion &amp; ACM Fallback</option>
+                                    <option value="flapping_link">Intermittent Flapping Link</option>
+                                    <option value="node_isolation">Hub / Node Reachability Isolation</option>
+                                    <option value="environmental_alarm">Shelter / Cabinet Thermal Overheat</option>
                                 </optgroup>
                             </select>
                             <span class="help-text">Aviat Carrier Telemetry Stream · Event-time PM series &amp; correlated alarms</span>
@@ -621,7 +621,7 @@
 
                     <!-- Operational Presentation & Architecture Card -->
                     <div style="margin-top:20px;padding:18px;background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-lg)">
-                        <h4 style="font-size:13px;color:var(--foreground);margin-bottom:8px">📡 Operational Architecture &amp; Demonstration Guide</h4>
+                        <h4 style="font-size:13px;color:var(--foreground);margin-bottom:8px">Operational Architecture &amp; Live Ingress Guide</h4>
                         <div style="font-size:12px;color:var(--muted-foreground);line-height:1.6">
                             <div><strong>1. Start at Network Simulator:</strong> Select from the 10 real-world Aviat transmission fault scenarios across Showcase and Full Microwave suites.</div>
                             <div><strong>2. Demonstrate Real-Time Ingress:</strong> Click "Inject Scenario Stream" and point out the live hop progression through Apache NiFi (9080) and RabbitMQ.</div>
