@@ -447,6 +447,41 @@ async function loadConfig() {
     await loadScenarioCatalog();
 }
 
+const SHOWCASE_SCENARIOS = [
+    { key: "site_power_failure", label: "⚡ 1. Cascading Alarms: Site Power Outage (Correlation ➔ Field Dispatch)" },
+    { key: "config_drift", label: "⚙️ 2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)" },
+    { key: "rain_fade", label: "🌧️ 3A. Rain Fade (Debate & Physics Engine ➔ Auto-Resolve)" },
+    { key: "antenna_drift", label: "📡 3B. Antenna Drift (Debate & Physics Engine ➔ Field Dispatch)" },
+];
+
+const ADDITIONAL_SCENARIOS = [
+    { key: "hardware_failure", label: "🔌 Hardware / Transceiver Failure" },
+    { key: "protection_switch", label: "🛡️ 1+1 HSB Protection Switch Failover" },
+    { key: "capacity_congestion", label: "📊 Capacity Congestion & ACM Fallback" },
+    { key: "flapping_link", label: "🔄 Intermittent Flapping Link" },
+    { key: "node_isolation", label: "🌐 Hub / Node Reachability Isolation" },
+    { key: "environmental_alarm", label: "🌡️ Shelter / Cabinet Thermal Overheat" },
+];
+
+const CASE_DESCRIPTIONS = {
+    config_drift: {
+        "1": "Case 1: Low-Risk Configuration Drift (ATPC Power Offset ➔ Sandbox Simulation)",
+        "2": "Case 2: High-Risk Critical Frequency Mismatch (80 GHz Backbone ➔ CAB Human Escalation)",
+    },
+    rain_fade: {
+        "1": "Case 1: Severe Storm Cell (18 mm/hr Rain ➔ ITU-R Physics Attribution ➔ ACM Hold)",
+        "2": "Case 2: Contradictory Rain Telemetry (Atmospheric Attenuation Evaluation)",
+    },
+    antenna_drift: {
+        "1": "Case 1: Structural Dish Misalignment (Clear Sky ➔ SCM Drift Proof ➔ Tower Crew Dispatch)",
+        "2": "Case 2: Contradictory Drift Telemetry (Mechanical vs Path Loss Analysis)",
+    },
+    site_power_failure: {
+        "1": "Case 1: Rectifier / Battery Discharge (Cascading DC Alarms ➔ Power Tech Dispatch)",
+        "2": "Case 2: Transient DC Fluctuation (Power Stability Verification)",
+    },
+};
+
 async function loadScenarioCatalog() {
     const scenarioSelect = document.getElementById("scenarioSelect");
     const caseSelect = document.getElementById("caseVariantSelect");
@@ -456,20 +491,56 @@ async function loadScenarioCatalog() {
         const data = await response.json();
         if (!response.ok || !Array.isArray(data.scenarios)) throw new Error(data.error || data.detail || "catalog unavailable");
         scenarioCatalog = data.scenarios;
+        
+        // Remember previous selection or default to site_power_failure
+        const prevScenario = scenarioSelect.value || "site_power_failure";
         scenarioSelect.replaceChildren();
-        scenarioCatalog.forEach((item) => {
-            const option = document.createElement("option");
-            option.value = item.scenario;
-            option.textContent = item.display_name || item.scenario;
-            scenarioSelect.appendChild(option);
+
+        // Group 1: Showcase Scenarios (Presenter Certified)
+        const groupShowcase = document.createElement("optgroup");
+        groupShowcase.label = "Showcase Scenarios (Presenter Certified)";
+        SHOWCASE_SCENARIOS.forEach(scen => {
+            const found = scenarioCatalog.find(s => s.scenario === scen.key);
+            if (found) {
+                const opt = document.createElement("option");
+                opt.value = scen.key;
+                opt.textContent = scen.label;
+                groupShowcase.appendChild(opt);
+            }
         });
+        scenarioSelect.appendChild(groupShowcase);
+
+        // Group 2: Additional Microwave Transmission Scenarios
+        const groupAdditional = document.createElement("optgroup");
+        groupAdditional.label = "Additional Microwave Transmission Scenarios (Full 10-Scenario Suite)";
+        ADDITIONAL_SCENARIOS.forEach(scen => {
+            const found = scenarioCatalog.find(s => s.scenario === scen.key);
+            if (found) {
+                const opt = document.createElement("option");
+                opt.value = scen.key;
+                opt.textContent = scen.label;
+                groupAdditional.appendChild(opt);
+            }
+        });
+        scenarioSelect.appendChild(groupAdditional);
+
+        // Restore selection or default to site_power_failure
+        if (scenarioSelect.querySelector(`option[value="${prevScenario}"]`)) {
+            scenarioSelect.value = prevScenario;
+        } else {
+            scenarioSelect.value = "site_power_failure";
+        }
+
         const refreshCases = () => {
-            const selected = scenarioCatalog.find((item) => item.scenario === scenarioSelect.value);
+            const currentScen = scenarioSelect.value;
+            const selected = scenarioCatalog.find((item) => item.scenario === currentScen);
+            const prevCase = caseSelect.value || "1";
             caseSelect.replaceChildren();
+            const descMap = CASE_DESCRIPTIONS[currentScen] || {};
             (selected && selected.cases || []).forEach((item) => {
                 const option = document.createElement("option");
                 option.value = String(item.case_number);
-                option.textContent = `Case ${item.case_number}: ${item.title || item.difficulty || "validated scenario"}`;
+                option.textContent = descMap[String(item.case_number)] || `Case ${item.case_number}: ${item.title || "Validated scenario"}`;
                 option.disabled = item.runnable === false;
                 caseSelect.appendChild(option);
             });
@@ -480,9 +551,13 @@ async function loadScenarioCatalog() {
                 option.disabled = true;
                 caseSelect.appendChild(option);
             }
+            if (caseSelect.querySelector(`option[value="${prevCase}"]`)) {
+                caseSelect.value = prevCase;
+            }
             updateScenarioDeepDive(scenarioSelect.value);
             loadScenarioPreflight();
         };
+
         scenarioSelect.addEventListener("change", refreshCases);
         refreshCases();
     } catch (err) {
@@ -832,9 +907,9 @@ async function injectScenarioStream() {
             return;
         }
 
-        statusText.textContent = `✅ Scenario accepted · Run ${data.demo_id || "—"}`;
+        statusText.textContent = `✅ Ingress stream active · Run #${data.demo_id || "—"}`;
         setStepActive("stepNifi", false, "2. NiFi delivery pending");
-        detail.innerHTML = `<strong>Cycle:</strong> <code>${escapeHtml(data.replay_cycle_id)}</code> | <strong>Simulator Run:</strong> <code>${escapeHtml(data.simulator_run_id)}</code>`;
+        detail.innerHTML = `<strong>Ingress Cycle:</strong> <code>${escapeHtml(data.replay_cycle_id)}</code> | <strong>Stream Session:</strong> <code>${escapeHtml(data.simulator_run_id)}</code>`;
 
         const scenInfo = SCENARIO_DETAILS[scenario] || {};
         const payloadPreview = {
