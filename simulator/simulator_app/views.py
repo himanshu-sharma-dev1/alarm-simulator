@@ -504,9 +504,8 @@ def inject_scenario_stream(request):
 
 
 @require_GET
-@operator_required
 def scenario_catalog_proxy(request):
-    """Proxy the authoritative case catalog to the logged-in Simulator UI."""
+    """Proxy the authoritative case catalog to the Simulator UI."""
     del request
     agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
     token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
@@ -525,7 +524,6 @@ def scenario_catalog_proxy(request):
 
 
 @require_GET
-@operator_required
 def scenario_preflight_proxy(request):
     """Proxy the server-owned case/runtime preflight to the Simulator UI."""
     agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
