@@ -1003,27 +1003,6 @@ function pollScenarioPipeline(demoId, agenticUrl) {
             setPipeNode("nodeNoc", "active", ":9015 · Background queue");
             return;
         }
-            const investigating = document.getElementById("phaseStepInvestigating");
-            if (investigating) {
-                investigating.style.borderTopColor = "#f59e0b";
-                investigating.style.color = "#b45309";
-                investigating.textContent = "↻ Awaiting AgenticNOC materialization";
-            }
-            const completed = document.getElementById("phaseStepCompleted");
-            if (completed) {
-                completed.style.borderTopColor = "#f59e0b";
-                completed.style.color = "#b45309";
-                completed.textContent = "↻ RCA not yet available";
-            }
-            detail.innerHTML = `
-                <div style="background:#fff7ed;padding:10px 14px;border-radius:6px;border:1px solid #fed7aa;margin-top:6px">
-                    <strong>Pipeline still processing</strong><br/>
-                    <span>No Incident was observed during the UI polling window. The run remains in progress; no completion is inferred.</span>
-                    <div style="margin-top:6px;color:#9a3412">Refresh AgenticNOC Incidents or inspect the streaming runtime before retrying this cycle.</div>
-                </div>
-            `;
-            return;
-        }
 
         try {
             const resp = await fetch(`/api/scenarios/poll/${demoId}/`);
@@ -1084,12 +1063,6 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                     streamEl.style.borderTopColor = "#22c55e";
                     streamEl.style.color = "#15803d";
                     streamEl.textContent = "✓ Simulator → NiFi → RabbitMQ";
-                }
-                const invEl = document.getElementById("phaseStepInvestigating");
-                if (invEl) {
-                    invEl.style.borderTopColor = "#3b82f6";
-                    invEl.style.color = "#1d4ed8";
-                    invEl.textContent = "● LangGraph investigation ready";
                 }
                 const completeEl = document.getElementById("phaseStepCompleted");
                 if (completeEl) {
