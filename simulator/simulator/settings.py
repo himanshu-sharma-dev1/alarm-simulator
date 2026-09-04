@@ -21,6 +21,33 @@ ALLOWED_HOSTS = [
     "*",
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:9019",
+    "http://127.0.0.1:9019",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://*.iktara.ai:9019",
+    "https://*.iktara.ai:9019",
+    "http://*.iktara.ai",
+    "https://*.iktara.ai",
+    "http://*.iktaratech.com:9019",
+    "https://*.iktaratech.com:9019",
+    "http://*.iktaratech.com",
+    "https://*.iktaratech.com",
+    "http://216.48.189.217:9019",
+    "http://216.48.189.217:8000",
+    "http://216.48.189.217",
+]
+_env_csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+if _env_csrf:
+    CSRF_TRUSTED_ORIGINS.extend([origin.strip() for origin in _env_csrf.split(",") if origin.strip()])
+
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_HTTPONLY = False
+SESSION_COOKIE_AGE = 604800  # 7 days
+
+
 SIMULATOR_FTP = {
     "HOST": os.environ.get("SIMULATOR_FTP_HOST", "ftp.iktara.ai"),
     "USERNAME": os.environ.get("SIMULATOR_FTP_USERNAME", ""),

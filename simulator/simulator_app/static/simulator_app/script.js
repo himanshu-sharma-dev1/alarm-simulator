@@ -91,10 +91,10 @@ const SCENARIO_DETAILS = {
         category: "ENVIRONMENTAL",
         link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
         band: "18 GHz Point-to-Point Microwave",
-        mechanism: "Heavy convective rain cell (45mm/hr) causing severe hydrometeor scattering and RF signal absorption along the line-of-sight path.",
-        telemetry: "Symmetric RSL fade from -42 dBm down to -68.4 dBm (-26.4 dB drop) on both near and far ends. SNR remains above 21 dB.",
-        alarms: "RSL_DEGRADED, RADIO_LINK_DEGRADED, ACM_MODULATION_FALLBACK",
-        expected_rca: "Atmospheric rain attenuation; no physical equipment replacement needed."
+        mechanism: "Controlled precipitation input is compared with event-time directional RF telemetry and approved link geometry.",
+        telemetry: "Symmetric RSL/SNR degradation on both link ends; exact values come from the sealed case manifest.",
+        alarms: "RF_DEGRADED (directional near/far symptoms)",
+        expected_rca: "Rain Fade is selected only when weather, physics and competing-hypothesis evidence support it."
     },
     antenna_drift: {
         title: "Antenna Drift (Mechanical Misalignment)",
@@ -104,10 +104,10 @@ const SCENARIO_DETAILS = {
         category: "PHYSICAL_PLANT",
         link: "AVT_UEMWSWB01 (Hop 0) ➔ AVT_UEMWBSNA01 (Hop 1)",
         band: "23 GHz Point-to-Point Microwave",
-        mechanism: "High wind gusts causing mechanical tower bracket slippage and antenna azimuth misalignment off main beam bore sight.",
-        telemetry: "Asymmetric persistent RSL loss (-24 dBm) with zero weather radar rain correlation. Dry atmosphere confirmed.",
-        alarms: "RSL_DEGRADED, RADIO_POOR_SIGNAL, BER_EXCEEDED",
-        expected_rca: "Antenna azimuth misalignment; mechanical dish re-alignment required."
+        mechanism: "A gradual asymmetric directional RF trend is compared with clear-weather and stable-configuration evidence.",
+        telemetry: "Root-side RSL/SNR declines across multiple buckets while the peer comparison remains stable; exact values come from the sealed manifest.",
+        alarms: "RF_DEGRADED (symptom only)",
+        expected_rca: "Antenna Drift is selected only when persistent trend and physical evidence outweigh Rain Fade and hardware alternatives."
     },
     hardware_failure: {
         title: "Hardware / Transceiver Failure",
@@ -450,7 +450,7 @@ async function loadConfig() {
 const SHOWCASE_SCENARIOS = [
     { key: "site_power_failure", label: "⚡ 1. Cascading Alarms: Site Power Outage (Correlation ➔ Field Dispatch)" },
     { key: "config_drift", label: "⚙️ 2. Configuration Mismatch (Sandbox Simulation vs Human Escalation)" },
-    { key: "rain_fade", label: "🌧️ 3A. Rain Fade (Debate & Physics Engine ➔ Auto-Resolve)" },
+    { key: "rain_fade", label: "🌧️ 3A. Rain Fade (Debate & Physics Engine ➔ Monitor Until Clear)" },
     { key: "antenna_drift", label: "📡 3B. Antenna Drift (Debate & Physics Engine ➔ Field Dispatch)" },
 ];
 
@@ -469,11 +469,11 @@ const CASE_DESCRIPTIONS = {
         "2": "Case 2: High-Risk Critical Frequency Mismatch (80 GHz Backbone ➔ CAB Human Escalation)",
     },
     rain_fade: {
-        "1": "Case 1: Severe Storm Cell (18 mm/hr Rain ➔ ITU-R Physics Attribution ➔ ACM Hold)",
+        "1": "Case 1: Directional RF Fade (Weather + ITU-R Model ➔ ACM Hold, Await Clear Evidence)",
         "2": "Case 2: Contradictory Rain Telemetry (Atmospheric Attenuation Evaluation)",
     },
     antenna_drift: {
-        "1": "Case 1: Structural Dish Misalignment (Clear Sky ➔ SCM Drift Proof ➔ Tower Crew Dispatch)",
+        "1": "Case 1: Persistent Asymmetric RF Trend (Clear Weather ➔ Evidence Debate ➔ Draft Tower Handoff)",
         "2": "Case 2: Contradictory Drift Telemetry (Mechanical vs Path Loss Analysis)",
     },
     site_power_failure: {
@@ -992,15 +992,22 @@ function pollScenarioPipeline(demoId, agenticUrl) {
     const hopTimer = document.getElementById("hopTimerBadge");
 
     let attempts = 0;
+    let requestInFlight = false;
     scenarioPollTimer = setInterval(async () => {
+        if (requestInFlight) return;
+        requestInFlight = true;
         attempts++;
-        if (hopTimer) hopTimer.textContent = `T+ ${(attempts * 0.8).toFixed(1)}s`;
+        if (hopTimer) hopTimer.textContent = `T+ ${(attempts * 1.5).toFixed(1)}s`;
 
-        if (attempts > 35) {
+        // LangGraph is provider-paced and may legitimately take several
+        // minutes.  Do not stop at the first materialized Incident (or at a
+        // 28-second UI timeout) and imply that the scenario is complete.
+        if (attempts > 240) {
             clearInterval(scenarioPollTimer);
             btn.disabled = false;
-            statusText.textContent = "⏳ Ingress accepted · pipeline processing in background";
+            statusText.textContent = "⏳ Ingress accepted · AgenticNOC is still processing in the background";
             setPipeNode("nodeNoc", "active", ":9015 · Background queue");
+            requestInFlight = false;
             return;
         }
 
@@ -1044,7 +1051,8 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                 setPipeNode("nodeCh", "done", ":9017 · PM Series Sealed ✓");
                 setPipeNode("nodeNoc", "done", ":9015 · Multi-Agent Active ✓");
                 setPipePulse("pulseChNoc", true);
-                statusText.textContent = `✅ Incident ${inc.reference_code || `#${inc.id}`} materialized`;
+                const workflowStatus = String(data.status || data.phase || "investigating").replace(/_/g, " ");
+                statusText.textContent = `✅ Incident ${inc.reference_code || `#${inc.id}`} · ${workflowStatus}`;
 
                 const matEl = document.getElementById("phaseStepMaterialized");
                 if (matEl) {
@@ -1094,7 +1102,7 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                                 Incident: <strong>${escapeHtml(inc.reference_code || `#${inc.id}`)}</strong> &bull; Severity: <strong>${escapeHtml(incidentSeverity)}</strong> &bull; Node: <strong>${escapeHtml(incidentNode)}</strong>
                             </div>
                             <div style="font-size:11px;color:#15803d;margin-top:2px">
-                                Multi-agent LangGraph workflow initiated · ClickHouse PM evidence sealed
+                                Multi-agent LangGraph: <strong>${escapeHtml(workflowStatus)}</strong> · ClickHouse PM evidence sealed
                             </div>
                         </div>
                         <div>
@@ -1104,8 +1112,11 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                         </div>
                     </div>
                 `;
-                clearInterval(scenarioPollTimer);
-                btn.disabled = false;
+                const terminal = ["completed", "escalated", "failed", "cancelled"].includes(String(data.status || "").toLowerCase());
+                if (terminal) {
+                    clearInterval(scenarioPollTimer);
+                    btn.disabled = false;
+                }
             }
             if (["failed", "cancelled"].includes(status)) {
                 statusText.textContent = `⚠ ${data.failure_reason || "Scenario run stopped"}`;
@@ -1113,5 +1124,6 @@ function pollScenarioPipeline(demoId, agenticUrl) {
                 btn.disabled = false;
             }
         } catch (_) {}
+        finally { requestInFlight = false; }
     }, 1500);
 }

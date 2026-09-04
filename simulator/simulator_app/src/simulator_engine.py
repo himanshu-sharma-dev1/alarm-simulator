@@ -480,7 +480,11 @@ class SimulatorEngine:
     def _action_follow_up_csv(event: dict, *, now: str) -> tuple[str, str]:
         """Serialize one approved-action clear as a normal vendor CSV row."""
         vendor = str(event.get("vendor") or "aviat").strip().lower()
-        external_id = str(event.get("external_alarm_id") or event.get("alarm_key") or "").split(":", 1)[-1]
+        # The normalizer keys alarm state by the vendor Event ID.  A clear
+        # must therefore reuse the original replay-unique external ID; the
+        # separate ``event_id`` in the follow-up envelope remains evidence of
+        # the clear event and must not create a second active alarm key.
+        external_id = str(event.get("external_alarm_id") or event.get("alarm_key") or event.get("event_id") or "").split(":", 1)[-1]
         site_id = str(event.get("site_id") or "")
         node_id = str(event.get("node_id") or event.get("object") or "")
         raised = str(event.get("raised_at") or now)
@@ -540,6 +544,7 @@ class SimulatorEngine:
         scenario: str = "",
         cycle_id: str = "",
         action_id: str = "",
+        config_change: dict | None = None,
     ) -> dict:
         """Post simulated recovery PM/config through canonical APIs.
 
@@ -600,37 +605,47 @@ class SimulatorEngine:
                     "Utilization (%)": 70.0,
                     "Modulation": "QAM-64",
                 })
+            before_cfg = config_change.get("before") if isinstance(config_change, dict) else {}
+            after_cfg = config_change.get("after") if isinstance(config_change, dict) else {}
+            baseline_cfg = before_cfg if isinstance(before_cfg, dict) else {}
+            # The action is a rollback: post-action evidence must describe the
+            # approved baseline, not a canned value or an invented peer.
+            baseline_cfg = {**baseline_cfg}
             config_record = {
                 **common,
-                "IP": "0.0.0.0",
-                "Name": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
-                "Link Name": f"SIMULATED-{node_id}",
+                "IP": baseline_cfg.get("ip_address") or baseline_cfg.get("IP") or "",
+                "Name": baseline_cfg.get("device_name") or (node_id[4:] if node_id.upper().startswith("AVT_") else node_id),
+                "Link Name": baseline_cfg.get("link_name") or baseline_cfg.get("Link Name") or "",
                 "Node ID": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
-                "Peer Node ID": "SIMULATED_PEER",
+                "Peer Node ID": baseline_cfg.get("peer_node_id") or "",
             }
             config_record["Link"] = {
-                "IP": "0.0.0.0",
-                "Name": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
-                "Link Name": f"SIMULATED-{node_id}",
+                "IP": config_record["IP"],
+                "Name": config_record["Name"],
+                "Link Name": config_record["Link Name"],
                 "Site A": node_id[4:] if node_id.upper().startswith("AVT_") else node_id,
-                "Site Z": "SIMULATED_PEER",
-                "Maximum Configured Capacity": 200.0,
+                "Site Z": baseline_cfg.get("peer_node_id") or "",
+                "Maximum Configured Capacity": baseline_cfg.get("configured_capacity_mbps"),
             }
+            freq = baseline_cfg.get("frequency_mhz")
+            rx_freq = baseline_cfg.get("rx_frequency_mhz")
+            bandwidth = baseline_cfg.get("channel_bandwidth_mhz")
+            tx_power = baseline_cfg.get("tx_power_dbm") or baseline_cfg.get("atpc_tx_power_dbm")
             config_record["Config"] = {"mmwCarrier1/1": {
-                "Tx Frequency (kHz)": 81250000,
-                "Rx Frequency (kHz)": 81250000,
-                "Channel Separation (kHz)": 250000,
-                "Detected Tx Power (dBm)": 11.4,
-                "ATPC Tx Power": 11.4,
+                "Tx Frequency (kHz)": int(float(freq) * 1000) if freq is not None else None,
+                "Rx Frequency (kHz)": int(float(rx_freq) * 1000) if rx_freq is not None else None,
+                "Channel Separation (kHz)": int(float(bandwidth) * 1000) if bandwidth is not None else None,
+                "Detected Tx Power (dBm)": tx_power,
+                "ATPC Tx Power": baseline_cfg.get("atpc_tx_power_dbm") or tx_power,
             }}
             if scenario == "config_drift":
                 # The generated fixture's latest snapshot is the known-good
                 # baseline after rollback.  Keep this explicit in the
                 # canonical record so ConfigDriftAgent can verify it.
                 config_record.update({
-                    "Frequency (MHz)": 81250.0,
-                    "Channel Bandwidth (MHz)": 250.0,
-                    "Tx Power (dBm)": 11.4,
+                    "Frequency (MHz)": freq,
+                    "Channel Bandwidth (MHz)": bandwidth,
+                    "Tx Power (dBm)": tx_power,
                 })
             for kind, record, target, collection in (
                 ("performance", performance_record, f"{base}/api/ingestion/performance/aviat/", performance),
@@ -654,6 +669,11 @@ class SimulatorEngine:
 
         node_id = str(alarm.get("node_id") or alarm.get("object") or "RADIO")
         site_id = str(alarm.get("site_id") or node_id)
+        if vendor == "aviat":
+            if site_id.startswith("AVT_"):
+                site_id = site_id[4:]
+            if node_id.startswith("AVT_"):
+                node_id = node_id[4:]
         raised = str(alarm.get("raised_at") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         category = str(alarm.get("canonical_category") or "UNKNOWN")
         event = str(alarm.get("event") or alarm.get("probable_cause_raw") or category)
@@ -662,7 +682,11 @@ class SimulatorEngine:
         # vendor-shaped phrase understood by the existing NiFi normalizer so
         # the live correlation path materializes the intended scenario.
         category_hints = {
-            "RF_DEGRADED": "Remote Fade Margin Low",
+            # Keep RF alarm ingress at the observed symptom level. A weather
+            # or mechanical conclusion must come from PM, weather and config
+            # evidence, never from a vendor-text hint.
+            "RF_DEGRADED": "Radio RF performance degraded",
+            "PERFORMANCE_DEGRADED": "Radio RF performance degraded",
             "NODE_ISOLATION": "Device is Offline",
             "LINK_DOWN": "Ethernet port link down",
             "HW_FAULT": "Module is missing",
@@ -670,6 +694,7 @@ class SimulatorEngine:
             "PROTECTION_SWITCH": "1+1 switch",
             "CAPACITY_CONGESTION": "Capacity exceeded",
             "SYNC_LOSS": "Loss of sync",
+            "COMMUNICATION_LOSS": "Communication loss",
             "CONFIG_MISMATCH": "Configuration mismatch",
             "ENVIRONMENTAL": "Temperature high",
         }
@@ -686,7 +711,8 @@ class SimulatorEngine:
             writer.writerow([site_id, event, "Radio", event_id, severity, state, raised, str(alarm.get("cleared_at") or ""), "0", str(alarm.get("ip_address") or ""), str(alarm.get("mac_address") or "")])
         else:
             writer.writerow(["Event", "Object", "Site", "Raised", "Event ID", "Device Raised", "Severity", "State", "Cleared"])
-            writer.writerow([event, f"Radio [{node_id}]", site_id, raised, event_id, raised, severity, state, str(alarm.get("cleared_at") or "")])
+            obj_str = str(alarm.get("object") or f"[{site_id}] Radio1")
+            writer.writerow([event, obj_str, site_id, raised, event_id, raised, severity, state, str(alarm.get("cleared_at") or "")])
         return output.getvalue()
 
     @staticmethod
@@ -800,19 +826,43 @@ class SimulatorEngine:
         nifi_url = self._build_url(host, port, path)
         alarm_delivery = []
         for index, alarm in enumerate(alarms, start=1):
-            try:
-                status_code, latency_ms = self._post_csv_event(
-                    nifi_url,
-                    self._scenario_alarm_csv(alarm, vendor=vendor),
-                    f"agentic-demo-{recipe.get('scenario') or 'scenario'}-{cycle_id}.csv",
-                    index,
-                    cycle_id=cycle_id,
-                    vendor=vendor,
-                    timeout=10,
-                )
-                alarm_delivery.append({"index": index, "event_id": alarm.get("event_id"), "status": "delivered", "http_status": status_code, "latency_ms": round(latency_ms, 2)})
-            except Exception as exc:
-                alarm_delivery.append({"index": index, "event_id": alarm.get("event_id"), "status": "failed", "error": str(exc)[:400]})
+            last_error = ""
+            delivered = None
+            for attempt in range(1, 4):
+                try:
+                    status_code, latency_ms = self._post_csv_event(
+                        nifi_url,
+                        self._scenario_alarm_csv(alarm, vendor=vendor),
+                        f"agentic-demo-{recipe.get('scenario') or 'scenario'}-{cycle_id}.csv",
+                        index,
+                        cycle_id=cycle_id,
+                        vendor=vendor,
+                        timeout=10,
+                    )
+                    delivered = {
+                        "index": index,
+                        "event_id": alarm.get("event_id"),
+                        "status": "delivered",
+                        "http_status": status_code,
+                        "latency_ms": round(latency_ms, 2),
+                        "attempts": attempt,
+                    }
+                    break
+                except Exception as exc:
+                    last_error = str(exc)[:400]
+                    if attempt < 3:
+                        # NiFi/RabbitMQ can briefly reject a burst while the
+                        # consumer/channel is reconnecting.  Retry the same
+                        # run-unique event ID; downstream normalization is
+                        # idempotent, so this cannot create a second alarm.
+                        time.sleep(0.25 * attempt)
+            alarm_delivery.append(delivered or {
+                "index": index,
+                "event_id": alarm.get("event_id"),
+                "status": "failed",
+                "error": last_error or "alarm delivery failed",
+                "attempts": 3,
+            })
 
         base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").strip().rstrip("/")
         token = str(getattr(settings, "SIMULATOR_AGENTICNOC_INTERNAL_TOKEN", "") or "").strip()
@@ -845,8 +895,9 @@ class SimulatorEngine:
                     config.append({"node_id": str(node_id), "status": "failed", "error": str(exc)[:400]})
             telemetry = {"status": "ok", "performance": performance, "config": config}
 
+        delivered_count = sum(1 for item in alarm_delivery if item.get("status") == "delivered")
         return {
-            "status": "accepted" if any(item.get("status") == "delivered" for item in alarm_delivery) else "failed",
+            "status": "accepted" if delivered_count == len(alarm_delivery) else "partial" if delivered_count else "failed",
             "scenario": str(recipe.get("scenario") or "")[:40],
             "vendor": vendor,
             "cycle_id": cycle_id,

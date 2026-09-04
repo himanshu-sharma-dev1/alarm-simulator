@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("", views.index, name="index"),
     path("login/", views.SimulatorLoginView.as_view(), name="login"),
+    path("logout/", views.simulator_logout, name="logout"),
     path("api/start/", views.start_simulator, name="start_simulator"),
     path("api/stop/", views.stop_simulator, name="stop_simulator"),
     path("api/status/", views.simulator_status, name="simulator_status"),

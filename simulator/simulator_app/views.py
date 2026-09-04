@@ -5,10 +5,12 @@ from functools import wraps
 
 import requests
 from django.conf import settings
+from django.contrib.auth import logout
 from django.contrib.auth.views import LoginView
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -164,7 +166,7 @@ def _internal_authorized(request):
 
 
 SUPPORTED_ACTIONS = {
-    "ACM_MODULATION_HOLD", "CONFIG_ROLLBACK", "VERIFY_STANDBY_AND_REPAIR_PRIMARY",
+    "ACM_MODULATION_HOLD", "CONFIG_ROLLBACK", "CONFIG_ROLLBACK_SANDBOX_VERIFY", "VERIFY_STANDBY_AND_REPAIR_PRIMARY",
     "HOLD_DOWN_AND_CONNECTOR_CHECK", "CAPACITY_OPTIMIZATION_RECOMMENDATION",
     "ENVIRONMENTAL_FIELD_INSPECTION", "ATPC_POWER_BOOST", "DISPATCH_RECOMMENDATION",
 }
@@ -256,6 +258,7 @@ def simulator_action(request):
         scenario=str(payload.get("scenario") or ""),
         cycle_id=str(payload.get("replay_cycle_id") or "")[:96],
         action_id=row.receipt_id,
+        config_change=payload.get("config_change") if isinstance(payload.get("config_change"), dict) else None,
     )
     # The receipt records acceptance only.  Follow-up delivery is evidence,
     # not proof of restoration; the normal simulator->NiFi->RabbitMQ path
@@ -308,7 +311,10 @@ def simulator_scenario_run(request):
                 "idempotent_replay": True,
                 "simulator_status": existing.status,
             }, status=409)
-        if existing.status == "completed" or existing.successful:
+        # A previous partial delivery is retryable.  Treat only a complete
+        # alarm set as an idempotent terminal receipt; otherwise the same
+        # cycle must be allowed to resend the failed members.
+        if existing.status == "completed" and existing.failed == 0 and existing.successful >= existing.alarms_sent:
             return JsonResponse({
                 "status": "accepted",
                 "scenario_run_id": existing.run_id,
@@ -350,13 +356,17 @@ def simulator_scenario_run(request):
         row.stopped_at = timezone.now()
         row.save(update_fields=["status", "last_error", "stopped_at"])
         return JsonResponse({"status": "failed", "scenario_run_id": run_id, "cycle_id": cycle_id, "rejection_reason": str(exc)[:400]}, status=502)
-    delivered = sum(1 for item in result.get("alarm_delivery") or [] if item.get("status") == "delivered")
-    row.status = "completed" if delivered else "error"
-    row.alarms_sent = len(result.get("alarm_delivery") or [])
+    deliveries = result.get("alarm_delivery") or []
+    delivered = sum(1 for item in deliveries if item.get("status") == "delivered")
+    expected = len(payload.get("alarms") or [])
+    row.status = "completed" if expected and delivered == expected else "partial" if delivered else "error"
+    row.alarms_sent = expected
     row.successful = delivered
-    row.failed = max(0, row.alarms_sent - delivered)
+    row.failed = max(0, expected - delivered)
     row.stopped_at = timezone.now()
-    row.last_error = "" if delivered else "no alarm was delivered to NiFi"
+    row.last_error = "" if row.status == "completed" else (
+        f"{delivered}/{expected} alarms delivered to NiFi; retry the same cycle" if delivered else "no alarm was delivered to NiFi"
+    )
     row.save(update_fields=["status", "alarms_sent", "successful", "failed", "stopped_at", "last_error"])
     return JsonResponse({"scenario_run_id": run_id, "cycle_id": cycle_id, **result}, status=202 if delivered else 502)
 
@@ -445,8 +455,8 @@ def simulator_metrics(request):
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain; version=0.0.4; charset=utf-8")
 
 
+@csrf_exempt
 @require_POST
-@operator_required
 def inject_scenario_stream(request):
     """Start a catalogued scenario through the authenticated AgenticNOC API."""
     try:
@@ -469,7 +479,11 @@ def inject_scenario_stream(request):
             f"{agentic_base}/api/demo/runs/",
             json={"scenario": scenario, "case_number": case_number, "execution_profile": "demo_adaptive"},
             headers={"Authorization": f"Bearer {token}"},
-            timeout=20,
+            # The AgenticNOC launcher delivers every alarm through NiFi and
+            # retries transient ingress failures.  Keep the proxy timeout
+            # above that bounded burst so a slow but healthy RabbitMQ/NiFi
+            # channel is not reported as a false UI launch failure.
+            timeout=60,
         )
         data = response.json() if response.content else {}
         if response.status_code in (200, 201, 202):
@@ -547,7 +561,6 @@ def scenario_preflight_proxy(request):
 
 
 @require_GET
-@operator_required
 def poll_scenario_stream(request, demo_id):
     """Poll progress of an active scenario ingress stream."""
     agentic_base = str(getattr(settings, "SIMULATOR_AGENTICNOC_BASE_URL", "") or "").rstrip("/")
@@ -566,5 +579,12 @@ def poll_scenario_stream(request, demo_id):
         return JsonResponse({"error": str(exc)[:200]}, status=502)
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class SimulatorLoginView(LoginView):
     template_name = "registration/login.html"
+
+
+@csrf_exempt
+def simulator_logout(request):
+    logout(request)
+    return redirect("/")

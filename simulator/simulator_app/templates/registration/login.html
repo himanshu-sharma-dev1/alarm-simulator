@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulator operator login</title>
+  <link rel="stylesheet" href="{% static 'simulator_app/style.css' %}">
+</head>
+<body>
+  <main class="login-card">
+    <h1>Simulator operator login</h1>
+    <p>Staff access is required to control the simulator.</p>
+    <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 10px 12px; margin-bottom: 16px; font-size: 12.5px; color: var(--foreground);">
+      <strong>Default credentials:</strong> <code>admin</code> / <code>admin</code>
+    </div>
+    <form method="post" action="/login/">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <input type="hidden" name="next" value="{{ next|default:'/' }}">
+      <div style="display: flex; gap: 10px; align-items: center; margin-top: 16px;">
+        <button class="btn btn-start" type="submit">Sign in</button>
+        <a href="/" style="font-size: 13px; color: var(--muted-foreground); text-decoration: none;">&larr; Return to Simulator</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
