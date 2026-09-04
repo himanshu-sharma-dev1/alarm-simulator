@@ -685,8 +685,12 @@ class SimulatorEngine:
             # Keep RF alarm ingress at the observed symptom level. A weather
             # or mechanical conclusion must come from PM, weather and config
             # evidence, never from a vendor-text hint.
-            "RF_DEGRADED": "Radio RF performance degraded",
-            "PERFORMANCE_DEGRADED": "Radio RF performance degraded",
+            # Keep the raw alarm symptom-only, but use the deployed Aviat
+            # phrase that the NiFi NormalizeAlarm processor recognizes.  The
+            # old generic wording was accepted by the local Python preflight
+            # mapper yet arrived at AgenticNOC as UNKNOWN from NiFi.
+            "RF_DEGRADED": "Remote Fade Margin Low",
+            "PERFORMANCE_DEGRADED": "Remote Fade Margin Low",
             "NODE_ISOLATION": "Device is Offline",
             "LINK_DOWN": "Ethernet port link down",
             "HW_FAULT": "Module is missing",

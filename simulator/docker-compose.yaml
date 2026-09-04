@@ -14,33 +14,8 @@ services:
       start_period: 20s
     ports:
       - 9019:8000
-    environment:
-      DJANGO_DEBUG: "${DJANGO_DEBUG:-false}"
-      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in the deployment environment}"
-      SIMULATOR_FTP_HOST: "${SIMULATOR_FTP_HOST:?set SIMULATOR_FTP_HOST in the deployment environment}"
-      SIMULATOR_FTP_USERNAME: "${SIMULATOR_FTP_USERNAME:?set SIMULATOR_FTP_USERNAME in the deployment environment}"
-      SIMULATOR_FTP_PASSWORD: "${SIMULATOR_FTP_PASSWORD:?set SIMULATOR_FTP_PASSWORD in the deployment environment}"
-      SIMULATOR_FTP_REMOTE_DIR: "${SIMULATOR_FTP_REMOTE_DIR:-/Agentic NOC/Data/Aviat}"
-      SIMULATOR_FTP_ARCHIVE_DIR: "${SIMULATOR_FTP_ARCHIVE_DIR:-/Agentic NOC/Data/Aviat/sent}"
-      SIMULATOR_FTP_REMOTE_DIR_AVIAT: "${SIMULATOR_FTP_REMOTE_DIR_AVIAT:-/Agentic NOC/Data/Aviat}"
-      SIMULATOR_FTP_ARCHIVE_DIR_AVIAT: "${SIMULATOR_FTP_ARCHIVE_DIR_AVIAT:-/Agentic NOC/Data/Aviat/sent}"
-      SIMULATOR_FTP_REMOTE_DIR_CAMBIUM: "${SIMULATOR_FTP_REMOTE_DIR_CAMBIUM:-/Agentic NOC/Data/CAMBIUM}"
-      SIMULATOR_FTP_ARCHIVE_DIR_CAMBIUM: "${SIMULATOR_FTP_ARCHIVE_DIR_CAMBIUM:-/Agentic NOC/Data/CAMBIUM/sent}"
-      SIMULATOR_ACCEPTANCE_SITE_ID: "${SIMULATOR_ACCEPTANCE_SITE_ID:-UEMWBSNA01}"
-      SIMULATOR_NIFI_HOST: "${SIMULATOR_NIFI_HOST:-180.75.0.10}"
-      SIMULATOR_NIFI_PORT: "${SIMULATOR_NIFI_PORT:-9080}"
-      SIMULATOR_NIFI_PATH: "${SIMULATOR_NIFI_PATH:-aviat}"
-      # Service URLs and credentials are deployment inputs. An unset value is
-      # intentionally surfaced as unavailable by the Simulator UI.
-      SIMULATOR_AGENTICNOC_RUNTIME_URL: "${SIMULATOR_AGENTICNOC_RUNTIME_URL:-}"
-      SIMULATOR_AGENTICNOC_BASE_URL: "${SIMULATOR_AGENTICNOC_BASE_URL:-}"
-      SIMULATOR_AGENTICNOC_INTERNAL_TOKEN: "${SIMULATOR_AGENTICNOC_INTERNAL_TOKEN:-}"
-      SIMULATOR_AGENTICNOC_PUBLIC_URL: "${SIMULATOR_AGENTICNOC_PUBLIC_URL:-}"
-      SIMULATOR_REDIS_HOST: "${SIMULATOR_REDIS_HOST:-180.75.0.15}"
-      SIMULATOR_REDIS_PORT: "${SIMULATOR_REDIS_PORT:-6379}"
-      # The internal replay endpoint is service-to-service and must fail
-      # closed when the deployment has not supplied its bearer credential.
-      SIMULATOR_INTERNAL_TOKEN: "${SIMULATOR_INTERNAL_TOKEN:-}"
+    env_file:
+      - .env
     volumes:
       - /root/simulator/simulator:/app
       - simulator-data:/app/data

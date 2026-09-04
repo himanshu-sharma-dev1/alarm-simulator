@@ -13,7 +13,49 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+
+def _load_env_file(filepath: Path) -> None:
+    """Load environment variables from a .env file into os.environ if not already set."""
+    if not filepath.is_file():
+        return
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip()
+                if (val.startswith('"') and val.endswith('"')) or (
+                    val.startswith("'") and val.endswith("'")
+                ):
+                    val = val[1:-1]
+                os.environ.setdefault(key, val)
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+
+    _env_file = os.environ.get("ENV_FILE")
+    if _env_file:
+        load_dotenv(_env_file)
+    else:
+        load_dotenv(BASE_DIR / ".env")
+        if Path(".env").resolve() != (BASE_DIR / ".env").resolve():
+            load_dotenv(Path(".env"))
+except ImportError:
+    _env_file = os.environ.get("ENV_FILE")
+    if _env_file:
+        _load_env_file(Path(_env_file))
+    else:
+        _load_env_file(BASE_DIR / ".env")
+        if Path(".env").resolve() != (BASE_DIR / ".env").resolve():
+            _load_env_file(Path(".env"))
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "simulator-dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() in {"1", "true", "yes"}
 
